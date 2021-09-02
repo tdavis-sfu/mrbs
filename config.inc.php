@@ -116,7 +116,7 @@ $mrbs_company = "Research Operations";   // This line must always be uncommented
 /***********************************************
  * Authentication settings - read AUTHENTICATION
  ***********************************************/
-/*
+
 
 $auth["type"] = "cas"; // How to validate the user/password.
 
@@ -152,7 +152,7 @@ $auth['cas']['no_server_validation'] = true;
 
 $auth['cas']['debug']   = true;  // Set to true to enable debug output. Disable for production.
 
-*/
+
 
 /* Add lines from systemdefaults.inc.php and areadefaults.inc.php below here
    to change the default configuration. Do _NOT_ modify systemdefaults.inc.php
