@@ -113,6 +113,83 @@ $mrbs_company = "Research Operations";   // This line must always be uncommented
 // your MRBS root directory, as seen by the users. For example:
 // $url_base =  "http://example.com/mrbs";
 
+/***********************************************
+ * Authentication settings - read AUTHENTICATION
+ ***********************************************/
+
+// NOTE: if you are using the 'joomla', 'saml' or 'wordpress' authentication type,
+// then you must use the corresponding session scheme.
+
+$auth["type"] = "cas"; // How to validate the user/password. One of
+                      // "auth_basic", "cas", "config", "crypt", "db", "db_ext", "idcheck",
+                      // "imap", "imap_php", "joomla", "ldap", "none", "nw", "pop3",
+                      // "saml" or "wordpress".
+
+$auth["session"] = "cas"; // How to get and keep the user ID. One of
+                          // "cas", "cookie", "host", "http", "ip", "joomla", "nt",
+                          // "omni", "php", "remote_user", "saml" or "wordpress".
+
+
+
+// Cookie path override. If this value is set it will be used by the
+// 'php' and 'cookie' session schemes to override the default behaviour
+// of automatically determining the cookie path to use
+//$cookie_path_override = '/mrbs/';
+
+// The list of administrators (can modify other peoples settings).
+//
+// This list is not needed when using the 'db' authentication scheme EXCEPT
+// when upgrading from a pre-MRBS 1.4.2 system that used db authentication.
+// Pre-1.4.2 the 'db' authentication scheme did need this list.   When running
+// edit_users.php for the first time in a 1.4.2 system or later, with an existing
+// users list in the database, the system will automatically add a field to
+// the table for access rights and give admin rights to those users in the database
+// for whom admin rights are defined here.   After that this list is ignored.
+unset($auth["admin"]);              // Include this when copying to config.inc.php
+$auth["admin"][] = "127.0.0.1";     // localhost IP address. Useful with IP sessions.
+$auth["admin"][] = "administrator"; // A user name from the user list. Useful
+                                    // with most other session schemes.
+//$auth["admin"][] = "10.0.0.1";
+//$auth["admin"][] = "10.0.0.2";
+//$auth["admin"][] = "10.0.0.3";
+
+
+
+// 'session_http' configuration settings
+$auth["realm"]  = "mrbs";
+
+
+
+// 'cas' configuration settings
+$auth['cas']['host']    =  'cas.sfu.ca';  // Full hostname of your CAS Server
+$auth['cas']['port']    = 443;  // CAS server port (integer). Normally for a https server it's 443
+$auth['cas']['context'] = '/cas';  // Context of the CAS Server
+// The "real" hosts of clustered cas server that send SAML logout messages
+// Assumes the cas server is load balanced across multiple hosts.
+// Failure to restrict SAML logout requests to authorized hosts could
+// allow denial of service attacks where at the least the server is
+// tied up parsing bogus XML messages.
+//$auth['cas']['real_hosts'] = array('cas-real-1.example.com', 'cas-real-2.example.com');
+
+// For production use set the CA certificate that is the issuer of the certificate
+// on the CAS server
+$auth['cas']['ca_cert_path'] = '/path/to/cachain.pem';
+
+// For quick testing you can disable SSL validation of the CAS server.
+// THIS SETTING IS NOT RECOMMENDED FOR PRODUCTION.
+// VALIDATING THE CAS SERVER IS CRUCIAL TO THE SECURITY OF THE CAS PROTOCOL!
+$auth['cas']['no_server_validation'] = false;
+
+// Filtering by attribute
+// The next two settings allow you to use CAS attributes to require that a user must have certain
+// attributes, otherwise their access level will be zero.  In other words unless they ahave the required
+// attributes they will be able to login successfully, but then won't have any more rights than an
+// unlogged in user.
+// $auth['cas']['filter_attr_name'] = ''; // eg 'department'
+// $auth['cas']['filter_attr_values'] = ''; // eg 'DEPT01', or else an array, eg array('DEPT01', 'DEPT02');
+
+$auth['cas']['debug']   = false;  // Set to true to enable debug output. Disable for production.
+
 
 
 
