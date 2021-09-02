@@ -120,12 +120,12 @@ $mrbs_company = "Research Operations";   // This line must always be uncommented
 // NOTE: if you are using the 'joomla', 'saml' or 'wordpress' authentication type,
 // then you must use the corresponding session scheme.
 
-$auth["type"] = "db"; // How to validate the user/password. One of
+$auth["type"] = "cas"; // How to validate the user/password. One of
                       // "auth_basic", "cas", "config", "crypt", "db", "db_ext", "idcheck",
                       // "imap", "imap_php", "joomla", "ldap", "none", "nw", "pop3",
                       // "saml" or "wordpress".
 
-$auth["session"] = "php"; // How to get and keep the user ID. One of
+$auth["session"] = "cas"; // How to get and keep the user ID. One of
                           // "cas", "cookie", "host", "http", "ip", "joomla", "nt",
                           // "omni", "php", "remote_user", "saml" or "wordpress".
 
@@ -147,13 +147,13 @@ $auth["session"] = "php"; // How to get and keep the user ID. One of
 // for whom admin rights are defined here.   After that this list is ignored.
 unset($auth["admin"]);              // Include this when copying to config.inc.php
 $auth["admin"][] = "127.0.0.1";     // localhost IP address. Useful with IP sessions.
-$auth["admin"][] = "administrator"; 
+$auth["admin"][] = "admin"; 
 $auth["admin"][] = "tjdavis";
-$auth["admin"][] = "tjl";
+$auth["admin"][] = "ashley";
 
 // A user name from the user list. Useful
                                     // with most other session schemes.
-//$auth["admin"][] = "10.0.0.1";
+$auth["admin"][] = "10.0.0.3";
 //$auth["admin"][] = "10.0.0.2";
 //$auth["admin"][] = "10.0.0.3";
 
