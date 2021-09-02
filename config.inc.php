@@ -36,7 +36,7 @@ namespace MRBS;
 //
 // A list of valid timezones can be found at http://php.net/manual/timezones.php
 // The following line must be uncommented by removing the '//' at the beginning
-//$timezone = "Europe/London";
+$timezone = "America/Vancouver";
 
 
 /*******************
