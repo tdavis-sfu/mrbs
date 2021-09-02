@@ -284,7 +284,8 @@ $private_override = "none";  // DEFAULT VALUE FOR NEW AREAS
            // changing to "public" or from "private" to "none"
 
 
-// SETTINGS FOR APPROVING BOOKINGS - PER-AREA
+// SETTINGS FOR APPROVING BOOKINGS - PER-AREA 
+
 
 // These settings control whether bookings made by ordinary users need to be
 // approved by an admin.   The settings here are the default settings for new
