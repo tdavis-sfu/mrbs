@@ -118,9 +118,9 @@ $mrbs_company = "Research Operations";   // This line must always be uncommented
  ***********************************************/
 
 
-$auth["type"] = "cas"; // How to validate the user/password.
+//$auth["type"] = "cas"; // How to validate the user/password.
 
-$auth["session"] = "cas"; // How to get and keep the user ID
+//$auth["session"] = "cas"; // How to get and keep the user ID
 
 // 'cas' configuration settings
 $auth['cas']['host']    = 'cas.sfu.ca';  // Full hostname of your CAS Server
