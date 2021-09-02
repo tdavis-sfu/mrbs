@@ -74,6 +74,86 @@ $db_tbl_prefix = "mrbs_";
 $db_persist = FALSE;
 
 
+/*********************************
+ * Site identification information
+ *********************************/
+
+// Set to true to enable multisite operation, in which case the settings below are for the
+// home site, identified by the empty string ''.   Other sites have their own supplementary
+// config fies in the sites/<sitename> directory.
+$multisite = false;
+$default_site = '';
+
+$mrbs_admin = "Tracy Lee";
+$mrbs_admin_email = "tjl@sfu.ca";
+// NOTE:  there are more email addresses in $mail_settings below.    You can also give
+// email addresses in the format 'Full Name <address>', for example:
+// $mrbs_admin_email = 'Booking System <admin_email@your.org>';
+// if the name section has any "peculiar" characters in it, you will need
+// to put the name in double quotes, e.g.:
+// $mrbs_admin_email = '"Bloggs, Joe" <admin_email@your.org>';
+
+// The company name is mandatory.   It is used in the header and also for email notifications.
+// The company logo, additional information and URL are all optional.
+
+$mrbs_company = "Research Operations";   // This line must always be uncommented ($mrbs_company is used in various places)
+
+// Uncomment this next line to use a logo instead of text for your organisation in the header
+//$mrbs_company_logo = "your_logo.gif";    // name of your logo file.   This example assumes it is in the MRBS directory
+
+// Uncomment this next line for supplementary information after your company name or logo.
+// This can contain HTML, for example if you want to include a link.
+//$mrbs_company_more_info = "You can put additional information here";  // e.g. "XYZ Department"
+
+// Uncomment this next line to have a link to your organisation in the header
+//$mrbs_company_url = "http://www.your_organisation.com/";
+
+// This is to fix URL problems when using a proxy in the environment.
+// If links inside MRBS or in email notifications appear broken, then specify here the URL of
+// your MRBS root directory, as seen by the users. For example:
+// $url_base =  "http://example.com/mrbs";
+
+/***********************************************
+ * Authentication settings - read AUTHENTICATION
+ ***********************************************/
+
+
+$auth["type"] = "cas"; // How to validate the user/password.
+
+$auth["session"] = "cas"; // How to get and keep the user ID. 
+
+// 'cas' configuration settings
+$auth['cas']['host']    = 'cas.sfu.ca';  // Full hostname of your CAS Server
+$auth['cas']['port']    = 443;  // CAS server port (integer). Normally for a https server it's 443
+$auth['cas']['context'] = '/cas';  // Context of the CAS Server
+// The "real" hosts of clustered cas server that send SAML logout messages
+// Assumes the cas server is load balanced across multiple hosts.
+// Failure to restrict SAML logout requests to authorized hosts could
+// allow denial of service attacks where at the least the server is
+// tied up parsing bogus XML messages.
+//$auth['cas']['real_hosts'] = array('cas-real-1.example.com', 'cas-real-2.example.com');
+
+// For production use set the CA certificate that is the issuer of the certificate
+// on the CAS server
+$auth['cas']['ca_cert_path'] = '/path/to/cachain.pem';
+
+// For quick testing you can disable SSL validation of the CAS server.
+// THIS SETTING IS NOT RECOMMENDED FOR PRODUCTION.
+// VALIDATING THE CAS SERVER IS CRUCIAL TO THE SECURITY OF THE CAS PROTOCOL!
+$auth['cas']['no_server_validation'] = false;
+
+// Filtering by attribute
+// The next two settings allow you to use CAS attributes to require that a user must have certain
+// attributes, otherwise their access level will be zero.  In other words unless they ahave the required
+// attributes they will be able to login successfully, but then won't have any more rights than an
+// unlogged in user.
+// $auth['cas']['filter_attr_name'] = ''; // eg 'department'
+// $auth['cas']['filter_attr_values'] = ''; // eg 'DEPT01', or else an array, eg array('DEPT01', 'DEPT02');
+
+$auth['cas']['debug']   = false;  // Set to true to enable debug output. Disable for production.
+
+
+
 /* Add lines from systemdefaults.inc.php and areadefaults.inc.php below here
    to change the default configuration. Do _NOT_ modify systemdefaults.inc.php
    or areadefaults.inc.php.  */
