@@ -113,44 +113,6 @@ $mrbs_company = "Research Operations";   // This line must always be uncommented
 // your MRBS root directory, as seen by the users. For example:
 // $url_base =  "http://example.com/mrbs";
 
-/***********************************************
- * Authentication settings - read AUTHENTICATION
- ***********************************************/
-$auth["type"] = "cas"; // How to validate the user/password. One of
-
-$auth["session"] = "cas"; // How to get and keep the user ID. 
-
-// 'cas' configuration settings
-$auth['cas']['host']    = 'cas.sfu.ca';  // Full hostname of your CAS Server
-$auth['cas']['port']    = 443;  // CAS server port (integer). Normally for a https server it's 443
-$auth['cas']['context'] = '/cas';  // Context of the CAS Server
-// The "real" hosts of clustered cas server that send SAML logout messages
-// Assumes the cas server is load balanced across multiple hosts.
-// Failure to restrict SAML logout requests to authorized hosts could
-// allow denial of service attacks where at the least the server is
-// tied up parsing bogus XML messages.
-//$auth['cas']['real_hosts'] = array('cas-real-1.example.com', 'cas-real-2.example.com');
-
-// For production use set the CA certificate that is the issuer of the certificate
-// on the CAS server
-$auth['cas']['ca_cert_path'] = '/path/to/cachain.pem';
-
-// For quick testing you can disable SSL validation of the CAS server.
-// THIS SETTING IS NOT RECOMMENDED FOR PRODUCTION.
-// VALIDATING THE CAS SERVER IS CRUCIAL TO THE SECURITY OF THE CAS PROTOCOL!
-$auth['cas']['no_server_validation'] = true;
-
-// Filtering by attribute
-// The next two settings allow you to use CAS attributes to require that a user must have certain
-// attributes, otherwise their access level will be zero.  In other words unless they ahave the required
-// attributes they will be able to login successfully, but then won't have any more rights than an
-// unlogged in user.
-// $auth['cas']['filter_attr_name'] = ''; // eg 'department'
-// $auth['cas']['filter_attr_values'] = ''; // eg 'DEPT01', or else an array, eg array('DEPT01', 'DEPT02');
-
-$auth['cas']['debug']   = false;  // Set to true to enable debug output. Disable for production.
 
 
-/* Add lines from systemdefaults.inc.php and areadefaults.inc.php below here
-   to change the default configuration. Do _NOT_ modify systemdefaults.inc.php
-   or areadefaults.inc.php.  */
+
