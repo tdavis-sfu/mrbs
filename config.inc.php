@@ -173,7 +173,7 @@ $auth['cas']['context'] = '/cas';  // Context of the CAS Server
 
 // For production use set the CA certificate that is the issuer of the certificate
 // on the CAS server
-$auth['cas']['ca_cert_path'] = '/path/to/cachain.pem';
+//$auth['cas']['ca_cert_path'] = '/path/to/cachain.pem';
 
 // For quick testing you can disable SSL validation of the CAS server.
 // THIS SETTING IS NOT RECOMMENDED FOR PRODUCTION.
