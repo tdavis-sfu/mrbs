@@ -188,7 +188,7 @@ $auth['cas']['no_server_validation'] = false;
 // $auth['cas']['filter_attr_name'] = ''; // eg 'department'
 // $auth['cas']['filter_attr_values'] = ''; // eg 'DEPT01', or else an array, eg array('DEPT01', 'DEPT02');
 
-$auth['cas']['debug']   = false;  // Set to true to enable debug output. Disable for production.
+$auth['cas']['debug']   = true;  // Set to true to enable debug output. Disable for production.
 
 
 
