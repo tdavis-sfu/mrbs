@@ -120,7 +120,7 @@ $mrbs_company = "Research Operations";   // This line must always be uncommented
 // NOTE: if you are using the 'joomla', 'saml' or 'wordpress' authentication type,
 // then you must use the corresponding session scheme.
 
-$auth["type"] = "cas"; // How to validate the user/password. One of
+$auth["type"] = "db"; // How to validate the user/password. One of
                       // "auth_basic", "cas", "config", "crypt", "db", "db_ext", "idcheck",
                       // "imap", "imap_php", "joomla", "ldap", "none", "nw", "pop3",
                       // "saml" or "wordpress".
