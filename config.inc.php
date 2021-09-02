@@ -125,7 +125,7 @@ $auth["type"] = "cas"; // How to validate the user/password. One of
                       // "imap", "imap_php", "joomla", "ldap", "none", "nw", "pop3",
                       // "saml" or "wordpress".
 
-$auth["session"] = "cas"; // How to get and keep the user ID. One of
+$auth["session"] = "php"; // How to get and keep the user ID. One of
                           // "cas", "cookie", "host", "http", "ip", "joomla", "nt",
                           // "omni", "php", "remote_user", "saml" or "wordpress".
 
