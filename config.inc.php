@@ -130,7 +130,7 @@ $auth["session"] = "cas"; // How to get and keep the user ID. One of
                           // "omni", "php", "remote_user", "saml" or "wordpress".
 
 
-
+ 
 // Cookie path override. If this value is set it will be used by the
 // 'php' and 'cookie' session schemes to override the default behaviour
 // of automatically determining the cookie path to use
