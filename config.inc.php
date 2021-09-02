@@ -140,7 +140,7 @@ $auth['cas']['ca_cert_path'] = '/path/to/cachain.pem';
 // For quick testing you can disable SSL validation of the CAS server.
 // THIS SETTING IS NOT RECOMMENDED FOR PRODUCTION.
 // VALIDATING THE CAS SERVER IS CRUCIAL TO THE SECURITY OF THE CAS PROTOCOL!
-$auth['cas']['no_server_validation'] = false;
+$auth['cas']['no_server_validation'] = true;
 
 // Filtering by attribute
 // The next two settings allow you to use CAS attributes to require that a user must have certain
