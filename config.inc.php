@@ -148,12 +148,12 @@ $auth["session"] = "cas"; // How to get and keep the user ID. One of
 unset($auth["admin"]);              // Include this when copying to config.inc.php
 $auth["admin"][] = "127.0.0.1";     // localhost IP address. Useful with IP sessions.
 //$auth["admin"][] = "admin";
-$auth["admin"][] = "barbaras";
+
 $auth["admin"][] = "tjdavis";
 $auth["admin"][] = "pkhoo";
 $auth["admin"][] = "tjl";
 $auth["admin"][] = "avprea";
-$auth["admin"][] = "chandler_cumming";
+
 // A user name from the user list. Useful
                                     // with most other session schemes.
 //$auth["admin"][] = "10.0.0.3";
@@ -222,7 +222,7 @@ $mail_settings['on_delete'] = false;  // when an entry is deleted
 $mail_settings['details'] = true;
 
 
-$auth['cas']['debug']   = false;  // Set to true to enable debug output. Disable for production.
+$auth['cas']['debug']   = true;  // Set to true to enable debug output. Disable for production.
 
 
 
