@@ -147,12 +147,16 @@ $auth["session"] = "cas"; // How to get and keep the user ID. One of
 // for whom admin rights are defined here.   After that this list is ignored.
 unset($auth["admin"]);              // Include this when copying to config.inc.php
 $auth["admin"][] = "127.0.0.1";     // localhost IP address. Useful with IP sessions.
-$auth["admin"][] = "admin"; 
+//$auth["admin"][] = "admin";
+$auth["admin"][] = "barbaras";
 $auth["admin"][] = "tjdavis";
-
+$auth["admin"][] = "pkhoo";
+$auth["admin"][] = "tjl";
+$auth["admin"][] = "avprea";
+$auth["admin"][] = "chandler_cumming";
 // A user name from the user list. Useful
                                     // with most other session schemes.
-$auth["admin"][] = "10.0.0.3";
+//$auth["admin"][] = "10.0.0.3";
 //$auth["admin"][] = "10.0.0.2";
 //$auth["admin"][] = "10.0.0.3";
 
@@ -191,8 +195,35 @@ $auth['cas']['no_server_validation'] = true;
 // $auth['cas']['filter_attr_name'] = ''; // eg 'department'
 // $auth['cas']['filter_attr_values'] = ''; // eg 'DEPT01', or else an array, eg array('DEPT01', 'DEPT02');
 
-$auth['cas']['debug']   = true;  // Set to true to enable debug output. Disable for production.
+
+$mail_settings['admin_backend'] = 'smtp';
+
+$smtp_settings['host'] = 'mailgate.sfu.ca';  // SMTP server
+$smtp_settings['port'] = 587;            // SMTP port number
+$smtp_settings['auth'] = true;        // Whether to use SMTP authentication
+$smtp_settings['secure'] = 'tls';         // Encryption method: '', 'tls' or 'ssl'
+                                       // server doesn't advertise it.
+                                       // will be used, unless the 'disable_opportunistic_tls' configuration parameter shown below is
+                                       // set to true.
+$smtp_settings['username'] = 'rio';       // Username (if using authentication)
+$smtp_settings['password'] = 'ii69$Hephaestus!';       // Password (if using authentication)
+$smtp_settings['ssl_verify_peer'] = true;
+$smtp_settings['ssl_verify_peer_name'] = true;
+$smtp_settings['ssl_allow_self_signed'] = false;
+$smtp_settings['disable_opportunistic_tls'] = false;
+
+$mail_settings['from'] = 'tjl@sfu.ca';
+$mail_settings['organizer'] = 'tjl@sfu.ca';
+$mail_settings['recipients'] = 'tjdavis@sfu.ca'; 
+$mail_settings['admin_on_bookings']      = true;
+$mail_settings['on_new']    = true;   // when an entry is created
+$mail_settings['on_change'] = true;  // when an entry is changed
+$mail_settings['on_delete'] = false;  // when an entry is deleted
+$mail_settings['details'] = true;
+
+
+$auth['cas']['debug']   = false;  // Set to true to enable debug output. Disable for production.
 
 
 
-
+$maxlength['room.description'] = 200;  // characters   (description field in room table)
