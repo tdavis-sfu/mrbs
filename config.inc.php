@@ -204,35 +204,4 @@ $db_persist = FALSE;
    // $auth['cas']['filter_attr_name'] = ''; // eg 'department'
    // $auth['cas']['filter_attr_values'] = ''; // eg 'DEPT01', or else an array, eg array('DEPT01', 'DEPT02');
    
-   
-   $mail_settings['admin_backend'] = 'smtp';
-   
-   $smtp_settings['host'] = 'mailgate.sfu.ca';  // SMTP server
-   $smtp_settings['port'] = 587;            // SMTP port number
-   $smtp_settings['auth'] = true;        // Whether to use SMTP authentication
-   $smtp_settings['secure'] = 'tls';         // Encryption method: '', 'tls' or 'ssl'
-										  // server doesn't advertise it.
-										  // will be used, unless the 'disable_opportunistic_tls' configuration parameter shown below is
-										  // set to true.
-   $smtp_settings['username'] = 'rio';       // Username (if using authentication)
-   $smtp_settings['password'] = 'ii69$Hephaestus!';       // Password (if using authentication)
-   $smtp_settings['ssl_verify_peer'] = true;
-   $smtp_settings['ssl_verify_peer_name'] = true;
-   $smtp_settings['ssl_allow_self_signed'] = false;
-   $smtp_settings['disable_opportunistic_tls'] = false;
-   
-   $mail_settings['from'] = 'tjl@sfu.ca';
-   $mail_settings['organizer'] = 'tjl@sfu.ca';
-   $mail_settings['recipients'] = 'tjdavis@sfu.ca'; 
-   $mail_settings['admin_on_bookings']      = true;
-   $mail_settings['on_new']    = true;   // when an entry is created
-   $mail_settings['on_change'] = true;  // when an entry is changed
-   $mail_settings['on_delete'] = false;  // when an entry is deleted
-   $mail_settings['details'] = true;
-   
-   
-   $auth['cas']['debug']   = false;  // Set to true to enable debug output. Disable for production.
-   
-   
-   
-   $maxlength['room.description'] = 200;  // characters   (description field in room table)
+  
