@@ -22,7 +22,7 @@ class AuthSaml extends Auth
   }
 
 
-  /* authValidateUser($user, $pass)
+  /* validateUser($user, $pass)
    *
    * Checks if the specified username/password pair are valid
    *
@@ -33,7 +33,11 @@ class AuthSaml extends Auth
    *   false    - The pair are invalid or do not exist
    *   string   - The validated username
    */
-  public function validateUser($user, $pass)
+  public function validateUser(
+    #[\SensitiveParameter]
+    ?string $user,
+    #[\SensitiveParameter]
+    ?string $pass)
   {
     $current_username = \MRBS\session()->getUsername();
 
@@ -46,11 +50,12 @@ class AuthSaml extends Auth
   }
 
 
-  public function getUser($username)
+  protected function getUserFresh(string $username) : ?User
   {
     $user = new User($username);
     $user->level = $this->getLevel($username);
     $user->email = $this->getEmail($username);
+    $user->display_name = $this->getUserDisplayName($username);
 
     return $user;
   }
@@ -73,9 +78,14 @@ class AuthSaml extends Auth
    * Returns:
    *   The user's access level
    */
-  private function getLevel($username)
+  private function getLevel(string $username) : int
   {
     global $auth;
+
+    if (!isset($auth['saml']['admin']))
+    {
+      return $this->getDefaultLevel($username);
+    }
 
     $userData = \MRBS\session()->ssp->getAttributes();
     $current_username = \MRBS\session()->getUsername();
@@ -96,6 +106,24 @@ class AuthSaml extends Auth
         }
       }
 
+      if (isset($auth['saml']['user']))
+      {
+        foreach ($auth['saml']['user'] as $attr => $values)
+        {
+          if (array_key_exists($attr, $userData))
+          {
+            foreach ($values as $value)
+            {
+              if (in_array($value, $userData[$attr]))
+              {
+                return 1;
+              }
+            }
+          }
+        }
+        return  0;
+      }
+
       return 1;
     }
 
@@ -105,7 +133,7 @@ class AuthSaml extends Auth
 
   // Gets the users e-mail from the SAML attributes.
   // Returns an empty string if no e-mail address was found
-  private function getEmail($username)
+  private function getEmail(string $username) : string
   {
     global $auth;
 
@@ -116,6 +144,27 @@ class AuthSaml extends Auth
     if (isset($current_username) && $current_username === $username)
     {
       return array_key_exists($mailAttr, $userData) ? $userData[$mailAttr][0] : '';
+    }
+
+    return '';
+  }
+
+  // Gets the users displayname from the SAML attributes.
+  // Returns an empty string if no givenName and surname was found
+  private function getUserDisplayName(string $username) : string
+  {
+    global $auth;
+
+    $givenNameAttr = $auth['saml']['attr']['givenName'];
+    $surnameAttr = $auth['saml']['attr']['surname'];
+    $userData = \MRBS\session()->ssp->getAttributes();
+    $current_username = \MRBS\session()->getUsername();
+
+    if (isset($current_username) && $current_username === $username)
+    {
+      $givenName = array_key_exists($givenNameAttr, $userData) ? $userData[$givenNameAttr][0] : '';
+      $surname = array_key_exists($surnameAttr, $userData) ? $userData[$surnameAttr][0] : '';
+      return trim($givenName . ' ' . $surname);
     }
 
     return '';

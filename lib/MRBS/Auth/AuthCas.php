@@ -1,9 +1,11 @@
 <?php
 namespace MRBS\Auth;
 
-use MRBS\Locale;
+use MRBS\Intl\Locale;
 use MRBS\User;
-use \phpCAS;
+use phpCAS;
+use function MRBS\get_lang;
+use function MRBS\is_https;
 
 class AuthCas extends Auth
 {
@@ -16,9 +18,9 @@ class AuthCas extends Auth
 
 
   // Initialise CAS
-  public function init()
+  public function init() : void
   {
-    global $auth;
+    global $auth, $server;
 
     static $init_complete = false;
 
@@ -27,16 +29,40 @@ class AuthCas extends Auth
       return;
     }
 
+    // We still use a couple of deprecated features - the phpCAS autoloader instead of composer and
+    // phpCAS::setDebug() instead of phpCAS::setLogger() - so temporarily disable deprecation errors
+    // and restore them later.
+    // TODO: Fix this
+    $old_level = error_reporting();
+    error_reporting($old_level & ~E_USER_DEPRECATED);
+
     if ($auth['cas']['debug'])
     {
       phpCAS::setDebug();
       phpCAS::setVerbose(true);
     }
 
+    // Form a client service name if we haven't been given one
+    if (isset($auth['cas']['client_service_name']))
+    {
+      $client_service_name = $auth['cas']['client_service_name'];
+    }
+    else
+    {
+      $client_service_name = ((is_https()) ? 'https' : 'http') . '://' . $server['HTTP_HOST'];
+      $client_service_name .= (isset($server['SERVER_PORT'])) ? ':' . $server['SERVER_PORT'] : '';
+    }
+
     phpCAS::client(CAS_VERSION_2_0,
       $auth['cas']['host'],
       (int)$auth['cas']['port'],
-      $auth['cas']['context']);
+      $auth['cas']['context'],
+      $client_service_name
+    );
+
+    // Restore the original level of error reporting now that we've made the first
+    // call to phpCAS.
+    error_reporting($old_level);
 
     if ($auth['cas']['no_server_validation'])
     {
@@ -66,11 +92,14 @@ class AuthCas extends Auth
       'en' => PHPCAS_LANG_ENGLISH,
       'es' => PHPCAS_LANG_SPANISH,
       'fr' => PHPCAS_LANG_FRENCH,
+      'gl' => PHPCAS_LANG_GALEGO,
       'ja' => PHPCAS_LANG_JAPANESE,
+      'pt' => PHPCAS_LANG_PORTUGUESE,
       'zh' => PHPCAS_LANG_CHINESE_SIMPLIFIED
     );
 
-    $locale = Locale::parseLocale(\MRBS\get_lang());
+    $locale = Locale::parseLocale(get_lang());
+
     if (isset($cas_lang_map[$locale['language']]))
     {
       phpCAS::setLang($cas_lang_map[$locale['language']]);
@@ -80,7 +109,7 @@ class AuthCas extends Auth
   }
 
 
-  /* authValidateUser($user, $pass)
+  /* validateUser($user, $pass)
    *
    * Checks if the specified username/password pair are valid
    *
@@ -91,13 +120,17 @@ class AuthCas extends Auth
    *   false    - The pair are invalid or do not exist
    *   string   - The validated username
    */
-  public function validateUser($user, $pass)
+  public function validateUser(
+    #[\SensitiveParameter]
+    ?string $user,
+    #[\SensitiveParameter]
+    ?string $pass)
   {
     return (phpCAS::isAuthenticated()) ? $user : false;
   }
 
 
-  public function getUser($username)
+  protected function getUserFresh(string $username) : ?User
   {
     $user = new User($username);
     $user->level = $this->getLevel($username);
@@ -107,7 +140,7 @@ class AuthCas extends Auth
   }
 
 
-  private function getLevel($username)
+  private function getLevel(string $username) : int
   {
     global $auth;
 

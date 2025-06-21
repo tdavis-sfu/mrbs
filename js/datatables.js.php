@@ -1,17 +1,54 @@
 <?php
+declare(strict_types=1);
 namespace MRBS;
 
 require "../defaultincludes.inc";
 
 http_headers(array("Content-type: application/x-javascript"),
-             60*30);  // 30 minute expiry
+  60*30);  // 30 minute expiry
 
-if ($use_strict)
+// See https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.spreadsheet.pagesetup?view=openxml-2.8.1
+define('EXCEL_PAGE_SIZES', array(
+  1 =>  'LETTER',
+  3 =>  'TABLOID',
+  5 =>  'LEGAL',
+  8 =>  'A3',
+  9 =>  'A4',
+  11 => 'A5'
+));
+
+// Get the Excel paper size constant.  If the config setting hasn't been set for some reason choose
+// a suitable default.  Otherwise if it's one of the predefined strings get its value, or else just
+// use the value itself.
+if (!isset($excel_default_paper))
 {
-  echo "'use strict';\n";
+  $excel_paper_size = array_search('A4', EXCEL_PAGE_SIZES);
+}
+elseif ((in_arrayi($excel_default_paper, EXCEL_PAGE_SIZES)))
+{
+  $excel_paper_size = array_search($excel_default_paper, EXCEL_PAGE_SIZES);
+}
+else
+{
+  $excel_paper_size = $excel_default_paper;
+}
+?>
+
+'use strict';
+
+<?php
+// Actions to take once the datatable's initialisation is complete.
+// Remember that some of the table initialisation operations, eg loading of the
+// language file, are asynchronous.
+?>
+var initCompleteActions = function initCompleteActions(dataTable) {
+  <?php // Make the table visible ?>
+  $('.datatable_container').css('visibility', 'visible');
+  <?php // Need to adjust column sizing after the table is made visible ?>
+  dataTable.columns.adjust();
 }
 
-
+<?php
 // Get the types, which are assumed to be in a data-type in a <span> in the <th>
 // of the table
 ?>
@@ -47,6 +84,70 @@ var getTypes = function getTypes(table) {
 
 
 <?php
+// Extract email addresses from mailto: links in the columns defined by columnSelector and
+// copy them to the clipboard, optionally sorting the result.
+?>
+var extractEmailAddresses = function(dt, columnSelector, sort) {
+  var result = [];
+  var message;
+  const scheme = 'mailto:';
+
+  $.each(dt.columns(columnSelector).data(), function (i, column) {
+    $.each(column, function (j, value) {
+      try {
+        var valueObject = $(value);
+        <?php // Need to search for an href in both this element and its descendants ?>
+        var href = valueObject.find('a').add(valueObject.filter('a')).attr('href');
+        if ((href !== undefined) && href.startsWith(scheme)) {
+          var address = href.substring(scheme.length);
+          if ((address !== '') && !result.includes(address)) {
+            result.push(address);
+          }
+        }
+      } catch (error) {
+        <?php
+        // No need to do anything. This will catch the cases when $(value) fails because
+        // value is not a valid anchor element, and so we are not interested in it anyway.
+        ?>
+      }
+    });
+  });
+
+  if (sort) {
+    result.sort();
+  }
+
+  navigator.clipboard.writeText(result.join(', '))
+    .then(() => {
+      message = '<?php echo get_js_vocab('unique_addresses_copied')?>';
+      message = message.replace('%d', result.length.toString());
+    })
+    .catch((err) => {
+      message = '<?php echo get_js_vocab('clipboard_copy_failed')?>';
+      console.error(err);
+    })
+    .finally(() => {
+      dt.buttons.info(
+        dt.i18n('buttons.copyTitle', 'Copy to clipboard'),
+        message,
+        2000
+      )
+    });
+};
+
+
+var customizeExcel = function(xlsx) {
+  <?php // See https://datatables.net/forums/discussion/45277/modify-page-orientation-in-xlxs-export ?>
+  var sheet = xlsx.xl.worksheets['sheet1.xml'];
+  var pageSetup = sheet.createElement('pageSetup');
+  sheet.childNodes['0'].appendChild(pageSetup);
+  var settings = sheet.getElementsByTagName('pageSetup')[0];
+  settings.setAttribute("r:id", "rId1"); <?php // Relationship ID - do not change ?>
+  settings.setAttribute('orientation', '<?php echo $excel_default_orientation ?>');
+  settings.setAttribute('paperSize', '<?php echo $excel_paper_size ?>');
+};
+
+<?php
 // Turn the table with id 'id' into a DataTable, using specificOptions
 // which are merged with the default options.  If the buttons property is
 // set in specificOptions then the first element in the array should be the
@@ -74,16 +175,25 @@ function makeDataTable(id, specificOptions, fixedColumnsOptions)
       exportOptions: {
         columns: ':visible',
         format: {
-          body: function ( data, row, column, node ) {
-            <?php // First of all get the default export data ?>
-            var result = $.fn.dataTable.Buttons.stripData(data);
+          body: function (data, row, column, node) {
+            var div = $('<div>' + data + '</div>');
+            <?php
+            // Remove any elements used for sorting, which are all <span>s that don't
+            // have a class of 'normal' (which the CSS makes visible). Note that we cannot
+            // just remove :hidden elements because that would also remove everything that's
+            // not on the current page and visible on screen.
+            // (We can get rid of this step when we move to using orthogonal data.)
+            ?>
+            div.find('span:not(.normal)').remove();
+            <?php // Apply the default export data stripping ?>
+            var result = $.fn.dataTable.Buttons.stripData(div.html());
             <?php
             // If that is the empty string then it may be that the data is actually a form
             // and the text we want is the text in the submit button.
             ?>
             if (result === '')
             {
-              var value = $('<div>' + data + '</div>').find('input[type="submit"]').attr('value');
+              var value = div.find('input[type="submit"]').attr('value');
               if (value !== undefined)
               {
                 result = value;
@@ -121,15 +231,16 @@ function makeDataTable(id, specificOptions, fixedColumnsOptions)
   <?php // Set up the default options ?>
   defaultOptions = {
     buttons: [{extend: 'colvis',
-               text: '<?php echo escape_js(get_vocab("show_hide_columns")) ?>'}],
+               text: '<?php echo get_js_vocab("show_hide_columns") ?>'}],
     deferRender: true,
-    lengthMenu: [ [10, 25, 50, 100, -1], [10, 25, 50, 100, '<?php echo escape_js(get_vocab('dt_all')) ?>'] ],
+    lengthMenu: [ [10, 25, 50, 100, -1], [10, 25, 50, 100, '<?php echo get_js_vocab('dt_all') ?>'] ],
     paging: true,
     pageLength: 25,
     pagingType: 'full_numbers',
     processing: true,
     scrollCollapse: true,
-    stateSave: true,
+    stateSave: <?php echo (empty($state_save)) ? 'false' : 'true' ?>,
+    stateDuration: <?php echo $state_duration ?? 0 ?>,
     dom: 'B<"clear">lfrtip',
     scrollX: '100%',
     colReorder: {}
@@ -156,25 +267,30 @@ function makeDataTable(id, specificOptions, fixedColumnsOptions)
     defaultOptions.buttons = defaultOptions.buttons.concat(
       $.extend(true, {}, buttonCommon, {
         extend: 'copy',
-        text: '<?php echo escape_js(get_vocab('copy')) ?>'
+        text: '<?php echo get_js_vocab('copy') ?>'
       }),
       $.extend(true, {}, buttonCommon, {
         extend: 'csv',
-        text: '<?php echo escape_js(get_vocab('csv')) ?>'
+        text: '<?php echo get_js_vocab('csv') ?>'
       }),
       $.extend(true, {}, buttonCommon, {
         extend: 'excel',
-        text: '<?php echo escape_js(get_vocab('excel')) ?>'
+        text: '<?php echo get_js_vocab('excel') ?>',
+        customize: customizeExcel
       }),
       $.extend(true, {}, buttonCommon, {
-        extend: 'pdf',
-        text: '<?php echo escape_js(get_vocab('pdf')) ?>',
+        <?php
+        // Use 'pdfHtml5' rather than 'pdf'.  See
+        // https://github.com/meeting-room-booking-system/mrbs-code/issues/3512
+        ?>
+        extend: 'pdfHtml5',
+        text: '<?php echo get_js_vocab('pdf') ?>',
         orientation: '<?php echo $pdf_default_orientation ?>',
         pageSize: '<?php echo $pdf_default_paper ?>'
       }),
       $.extend(true, {}, buttonCommon, {
         extend: 'print',
-        text: '<?php echo escape_js(get_vocab('print')) ?>'
+        text: '<?php echo get_js_vocab('print') ?>'
       })
     );
   }
@@ -183,13 +299,8 @@ function makeDataTable(id, specificOptions, fixedColumnsOptions)
   // Set the language file to be used
   if ($lang_file = get_datatable_lang_path())
   {
-    // If using the language.url way of loading a DataTables language file,
-    // then the file must be valid JSON.   The .lang files that can be
-    // downloaded from GitHub are not valid JSON as they contain comments.  They
-    // therefore cannot be used with language.url, but instead have to be
-    // included directly.
     ?>
-    defaultOptions.language = <?php include "../$lang_file" ?>;
+    defaultOptions.language = {url: '<?php echo "./$lang_file" ?>'}
     <?php
   }
   ?>
@@ -228,11 +339,30 @@ function makeDataTable(id, specificOptions, fixedColumnsOptions)
     }
     defaultOptions.buttons[0].columns = colVisIncludeCols;
   }
+
+  defaultOptions.initComplete = initCompleteActions;
+
   <?php
   // Merge the specific options with the default options.  We do a deep
   // merge.
   ?>
   mergedOptions = $.extend(true, {}, defaultOptions, specificOptions);
+  // Merge the initComplete properties, if any of them are set.  This has to be
+  // done separately as they are functions.
+  if (defaultOptions.initComplete || specificOptions.initComplete) {
+    mergedOptions.initComplete = function () {
+      if (defaultOptions.initComplete) {
+        defaultOptions.initComplete.call(this, dataTable);
+      }
+      if (specificOptions.initComplete) {
+        specificOptions.initComplete.call(this);
+      }
+    };
+  }
+
+  <?php // Localise the sorting.  See https://datatables.net/blog/2017-02-28 ?>
+  $.fn.dataTable.ext.order.intl($('body').data('langPrefs'));
+
   dataTable = table.DataTable(mergedOptions);
 
   if (fixedColumnsOptions)
@@ -263,10 +393,6 @@ function makeDataTable(id, specificOptions, fixedColumnsOptions)
     */
     ?>
   }
-
-  $('.datatable_container').css('visibility', 'visible');
-  <?php // Need to adjust column sizing after the table is made visible ?>
-  dataTable.columns.adjust();
 
   <?php
   // Adjust the column sizing on a window resize.   We shouldn't have to do this because

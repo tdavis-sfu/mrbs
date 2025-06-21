@@ -1,7 +1,7 @@
 <?php
 namespace MRBS\Auth;
 
-use \MRBS\User;
+use MRBS\User;
 
 // For use with mod_idcheck (http://idcheck.sourceforge.net/)
 // Must have $auth['session'] set to 'remote_user'.
@@ -22,7 +22,30 @@ class AuthIdcheck extends AuthNone
   }
 
 
-  public function getUser($username)
+  /* validateUser($user, $pass)
+   *
+   * Checks if the specified username/password pair are valid
+   *
+   * $user  - The user name
+   * $pass  - The password
+   *
+   * Returns:
+   *   false    - The pair are invalid or do not exist
+   *   string   - The validated username
+   */
+  public function validateUser(
+    #[\SensitiveParameter]
+    ?string $user,
+    #[\SensitiveParameter]
+    ?string $pass)
+  {
+    // Method provided for completeness as it's an abstract method.
+    // However it's not used by the 'remote_user' session scheme.
+    return $user;
+  }
+
+
+  protected function getUserFresh(string $username) : ?User
   {
     global $server;
 

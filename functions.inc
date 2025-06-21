@@ -1,77 +1,20 @@
 <?php
+declare(strict_types=1);
 namespace MRBS;
 
-use \DateTimeZone;
+use DateInterval;
+use DateTimeZone;
+use MRBS\Form\Field;
 use MRBS\Form\FieldSelect;
+use MRBS\ICalendar\RFC5545;
 use PHPMailer\PHPMailer\PHPMailer;
 
 require_once "mrbs_sql.inc";
 
-
-// Emulates the PHP 8 function str_contains()
-if (!function_exists('str_contains'))
-{
-  function str_contains($haystack, $needle)
-  {
-    if (!isset($needle) || ($needle === ''))
-    {
-      // This is the way the PHP function behaves
-      return true;
-    }
-    else
-    {
-      // This works with multibyte characters because
-      // we are not worried about the actual position.
-      return (strpos($haystack, $needle) !== false);
-    }
-  }
-}
-
-
-// Emulates the PHP 8 function str_starts_with()
-if (!function_exists('str_starts_with'))
-{
-  function str_starts_with($haystack, $needle)
-  {
-    if (!isset($needle) || ($needle === ''))
-    {
-      // This is the way the PHP function behaves
-      return true;
-    }
-    else
-    {
-      // This works with multibyte characters because
-      // we are looking for position zero.
-      return (strpos($haystack, $needle) === 0);
-    }
-  }
-}
-
-
-// Emulates the PHP 8 function str_ends_with()
-if (!function_exists('str_ends_with'))
-{
-  function str_ends_with($haystack, $needle)
-  {
-    if (!isset($needle) || ($needle === ''))
-    {
-      // This is the way the PHP function behaves
-      return true;
-    }
-    else
-    {
-      // This works with multibyte characters because strpos() and strlen()
-      // will either be both overloaded with the mb_ versions or both not.
-      return (strpos($haystack, $needle) === strlen($haystack) - strlen($needle));
-    }
-  }
-}
-
-
 // Constrain an integer to fit a certain type.  Useful for making sure
 // that integers will fit within the range for a database type.
 // Only 4 byte unsigned integers supported at the moment.
-function constrain_int($n, $bytes, $unsigned=false)
+function constrain_int(int $n, int $bytes, bool $unsigned=false) : int
 {
   if (!$unsigned && ($bytes == 4))
   {
@@ -89,14 +32,31 @@ function constrain_int($n, $bytes, $unsigned=false)
 
 // Case-insensitive in_array
 // See https://www.php.net/manual/en/function.in-array.php#Hcom89256
-function in_arrayi($needle, $haystack)
+function in_arrayi($needle, array $haystack, bool $strict=false) : bool
 {
   return in_array(utf8_strtolower($needle),
-                  array_map(__NAMESPACE__ . "\\utf8_strtolower", $haystack));
+                  array_map(__NAMESPACE__ . "\\utf8_strtolower", $haystack),
+                  $strict);
 }
 
 
-function generate_token($length)
+
+// Checks if a string ends with one of an array of given substrings
+function str_ends_with_array(string $haystack, array $needles) : bool
+{
+  foreach ($needles as $needle)
+  {
+    if (str_ends_with($haystack, $needle))
+    {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+
+function generate_token(int $length) : string
 {
   if (function_exists('random_bytes'))
   {
@@ -111,22 +71,51 @@ function generate_token($length)
     }
   }
 
-  if (function_exists('mcrypt_create_iv'))
-  {
-    return bin2hex(mcrypt_create_iv($length, MCRYPT_DEV_URANDOM));
-  }
-
   if (function_exists('openssl_random_pseudo_bytes'))
   {
     return bin2hex(openssl_random_pseudo_bytes($length));
   }
 
-  return md5(uniqid(rand(), true));
+  return md5(uniqid((string)rand(), true));
+}
+
+
+// A locale aware version of strcasecmp()
+function strcasecmp_locale(string $string1, string $string2) : int
+{
+  // Trivial case
+  if ($string1 === $string2)
+  {
+    return 0;
+  }
+
+  // Sort the array.  If the order is reversed then $string1 > $string2
+  // (When this function is being used as a callback for usort, and if the original array
+  // is sorted in ascending order, which it well might be if it's the result of
+  // an SQL query with an ORDER BY, then it's fastest to test for $string1 > $string2
+  // first, as below.)
+  $original_array = array($string1, $string2);
+  $array = $original_array;
+  asort($array,SORT_LOCALE_STRING | SORT_FLAG_CASE);
+  if ($array !== $original_array)
+  {
+    return 1;
+  }
+  // Otherwise, flip the array and try again.  If the order is reversed then $string2 > $string1
+  $original_array = array($string2, $string1);
+  $array = $original_array;
+  asort($array,SORT_LOCALE_STRING | SORT_FLAG_CASE);
+  if ($array !== $original_array)
+  {
+    return -1;
+  }
+  // Otherwise they must be equal
+  return 0;
 }
 
 
 // Returns a name in the format last_name first_name for sorting
-function get_sortable_name($name)
+function get_sortable_name(?string $name) : ?string
 {
   global $sort_users_by_last_name;
 
@@ -139,6 +128,18 @@ function get_sortable_name($name)
   {
     return $name;
   }
+
+  // Look for anything in brackets (ordinary or square) at the
+  // end of the name and treat it as a suffix.  For example if
+  // the display name is "Joe Bloggs (visitor)" then the last name
+  // is really "Bloggs".
+  $pattern = '/\s*\(.*\)$|[.*]$/';
+  if (preg_match($pattern, $name, $matches))
+  {
+    $suffix = $matches[0];
+    $name = preg_replace($pattern, '', $name);
+  }
+
 
   $tokens = explode(' ', $name);
 
@@ -157,12 +158,24 @@ function get_sortable_name($name)
     }
   }
 
+  // Add back in any suffix
+  if (isset($suffix))
+  {
+    $result .= $suffix;
+  }
+
   return $result;
 }
 
 
+function compare_display_names(string $name1, string $name2) : int
+{
+  return strcasecmp_locale(get_sortable_name($name1), get_sortable_name($name2));
+}
+
+
 // Tests whether the request has come via an Ajax call or not.
-function is_ajax()
+function is_ajax() : bool
 {
   global $server;
 
@@ -170,13 +183,16 @@ function is_ajax()
           (utf8_strtolower($server['HTTP_X_REQUESTED_WITH']) == 'xmlhttprequest'));
 }
 
-// Returns the contents of the URL. If $if_modified_since is set it will send that
-// an 'If-Modified-Since' header in the request.  The result is an associative array,
-// indexed by
+// Returns the contents of the URL. If $if_modified_since is set it will send that in
+// an 'If-Modified-Since' header in the request.  A user agent to be used in the header
+// can be specified by $user_agent, otherwise it defaults to the browser's user agent
+// if available, otherwise the string 'PHP'.
+//
+// The result is an associative array, indexed by
 //    'body'      The body of the response (FALSE on failure)
 //    'code'      The HTTP response code, eg 200 (NULL if none found)
 //    'headers'   An associative array of headers with the keys converted to lower case
-function url_get_contents($url, $if_modified_since=null)
+function url_get_contents(string $url, ?string $if_modified_since=null, ?string $user_agent=null) : array
 {
   global $server;
 
@@ -186,15 +202,16 @@ function url_get_contents($url, $if_modified_since=null)
   $transfer_timeout = 2;  // seconds
   $curlopt_timeout  = 3;  // seconds
 
-  // If we can, set the User Agent string to be that of the browser, otherwise some sites
-  // fail with 403 errors.
-  if (isset($server['HTTP_USER_AGENT']) && ($server['HTTP_USER_AGENT'] !== ''))
+  if (!isset($user_agent))
   {
-    $user_agent = $server['HTTP_USER_AGENT'];
-  }
-  else
-  {
-    $user_agent = 'PHP';
+    // If we can, set the User Agent string to be that of the browser, otherwise some sites
+    // fail with 403 errors.
+    if (isset($server['HTTP_USER_AGENT']) && ($server['HTTP_USER_AGENT'] !== '')) {
+      $user_agent = $server['HTTP_USER_AGENT'];
+    }
+    else {
+      $user_agent = 'PHP';
+    }
   }
 
   // If we can we use cURL to download the page because it allows us to
@@ -202,7 +219,7 @@ function url_get_contents($url, $if_modified_since=null)
   // (We can only set a timeout on transfer time with file_get_contents()).  The
   // connection timeout is important because MRBS may be being used in sites
   // where direct access to the internet is not allowed.
-  if (function_exists('curl_init'))
+  if (function_available('curl_exec'))
   {
     $headers = array();
     $ch = curl_init($url);
@@ -212,6 +229,11 @@ function url_get_contents($url, $if_modified_since=null)
     curl_setopt($ch, CURLOPT_TIMEOUT, $curlopt_timeout);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+    // Use compression if we can
+    if (defined('CURLOPT_ENCODING'))
+    {
+      curl_setopt($ch, CURLOPT_ENCODING, '');
+    }
     if (isset($if_modified_since))
     {
       curl_setopt($ch, CURLOPT_HTTPHEADER, array(
@@ -291,7 +313,7 @@ function url_get_contents($url, $if_modified_since=null)
 }
 
 
-function get_type_options($include_admin_types=false)
+function get_type_options(bool $include_admin_types) : array
 {
   global $booking_types, $auth;
 
@@ -316,7 +338,7 @@ function get_type_options($include_admin_types=false)
 
 
 // Converts an array of types into a string
-function get_type_names($types, $glue=', ')
+function get_type_names(?array $types, string $glue=', ') : string
 {
   if (empty($types))
   {
@@ -334,58 +356,12 @@ function get_type_names($types, $glue=', ')
 }
 
 
-function get_rep_interval_units($rep_type, $rep_interval)
-{
-  switch ($rep_type)
-  {
-    case REP_DAILY:
-      return ($rep_interval == 1) ? get_vocab('day') : get_vocab('days');
-      break;
-    case REP_WEEKLY:
-      return ($rep_interval == 1) ? get_vocab('week') : get_vocab('weeks');
-      break;
-    case REP_MONTHLY:
-      return ($rep_interval == 1) ? get_vocab('month') : get_vocab('months');
-      break;
-    case REP_YEARLY:
-      return ($rep_interval == 1) ? get_vocab('year_lc') : get_vocab('years');
-      break;
-    default:
-      return '';
-      break;
-  }
-}
-
-
-function get_rep_interval_units_mail($rep_type, $rep_interval)
-{
-  switch ($rep_type)
-  {
-    case REP_DAILY:
-      return ($rep_interval == 1) ? get_mail_vocab('day') : get_mail_vocab('days');
-      break;
-    case REP_WEEKLY:
-      return ($rep_interval == 1) ? get_mail_vocab('week') : get_mail_vocab('weeks');
-      break;
-    case REP_MONTHLY:
-      return ($rep_interval == 1) ? get_mail_vocab('month') : get_mail_vocab('months');
-      break;
-    case REP_YEARLY:
-      return ($rep_interval == 1) ? get_mail_vocab('year_lc') : get_mail_vocab('years');
-      break;
-    default:
-      return '';
-      break;
-  }
-}
-
-
 // Returns the maximum length, in characters, of a column, or NULL if the maximum
 // length is not known.   Should only be called after any database upgrades have been
 // performed as the results are stored in a static variable and so the maximum lengths
 // may change after an upgrade.  $column is of the form, <table_short_name.column_name>,
 // for example, 'area.area_name'.
-function maxlength($column)
+function maxlength(string $column) : ?int
 {
   static $maxlengths = array();
 
@@ -432,7 +408,7 @@ function maxlength($column)
 // This is OK in current versions of MySQL and PostgreSQL, though in earler
 // versions of MySQL (I haven't checked PostgreSQL) this could cause problems
 // as a VARCHAR(n) was n bytes long rather than n characters.
-function truncate($value, $column)
+function truncate(string $value, string $column) : string
 {
   if (null !== ($maxlength = maxlength($column)))
   {
@@ -445,7 +421,7 @@ function truncate($value, $column)
 
 // Formats a number taking into account the current locale.  (Could use
 // the NumberFormatter class, but the intl extension isn't always installed.)
-function number_format_locale($number, $decimals=0)
+function number_format_locale($number, int $decimals=0) : string
 {
   $locale_info = localeconv();
   return number_format($number, $decimals, $locale_info['decimal_point'], $locale_info['thousands_sep']);
@@ -466,16 +442,22 @@ function get_microtime()
 }
 
 
-function function_disabled($name)
+function function_disabled(string $name) : bool
 {
-  $disabled = explode(', ', ini_get('disable_functions'));
+  $disabled = preg_split('/\s*,\s*/', ini_get('disable_functions'));
   return in_array($name, $disabled);
+}
+
+
+function function_available(string $name) : bool
+{
+  return function_exists($name) && !function_disabled($name);
 }
 
 
 // Set the default timezone.   If $tz is not set, then the default MRBS
 // timezone from the config file is used.
-function mrbs_default_timezone_set($tz=null)
+function mrbs_default_timezone_set(?string $tz=null) : void
 {
   global $area_defaults;
 
@@ -511,37 +493,30 @@ function mrbs_default_timezone_set($tz=null)
 // The MRBS wrapper round date_default_timezone_get() is redundant now.  It used to
 // cater for PHP servers that don't have date_default_timezone_get(), but now that
 // the minimum PHP version is >= 5.1.0, there are none.
-function mrbs_default_timezone_get()
+function mrbs_default_timezone_get() : string
 {
   return date_default_timezone_get();
 }
 
 
-function get_display_name($username)
+function format_compound_name(string $username, string $display_name) : string
 {
-  $user = auth()->getUser($username);
-  return (isset($user)) ? $user->display_name : $username;
+  return ($username === $display_name) ? $username : get_vocab('compound_name', $username, $display_name);
 }
 
 
 // Gets the username and display name, if different.  Useful in places such as search and
 // report results, where you have to search by username - because that's what's stored in
 // the entry - but you are interested in the display name.
-function get_compound_name($username)
+function get_compound_name(?string $username) : string
 {
-  $result = '';
-
   if (isset($username))
   {
-    $result = $username;
-    $display_name = get_display_name($username);
-    if ($username !== $display_name)
-    {
-      $result .= " ($display_name)";
-    }
+    $display_name = auth()->getDisplayName($username);
+    return (isset($display_name) && ($display_name !== '')) ? format_compound_name($username, $display_name) : $username;
   }
 
-  return $result;
+  return '';
 }
 
 
@@ -556,9 +531,14 @@ function get_cookie_path()
   else
   {
     // REQUEST_URI isn't set on all PHP systems, so fall back to PHP_SELF
-    $cookie_path = isset($server['REQUEST_URI']) ? $server['REQUEST_URI'] : $server['PHP_SELF'];
+    $cookie_path = $server['REQUEST_URI'] ?? $server['PHP_SELF'];
     // Strip off everything after the last '/'
     $cookie_path = preg_replace('/[^\/]*$/', '', $cookie_path);
+    // Some cases have been observed of the cookie path being set to, for example,
+    // '/mrbs/ajax/' or '/mrbs/js/'.  It's not clear how this can happen (possibly
+    // some kind of timing issue when an Ajax request arrives before the main page??)
+    // but in case it does, strip off any trailing 'ajax/' or 'js/' string.
+    $cookie_path = preg_replace('/(ajax|js)\/$/', '', $cookie_path);
   }
 
   return $cookie_path;
@@ -601,7 +581,7 @@ function url_path()
 // Returns the base URL for MRBS.  If the config variable $url_base is set then that
 // overrides the automatic calculation.  A '/' will be appended to the end of the string,
 // unless it is empty or already ends in a '/'.
-function url_base()
+function url_base() : string
 {
   global $url_base, $server;
 
@@ -618,6 +598,13 @@ function url_base()
     $result = '';
   }
 
+  // Add a scheme if we haven't got one
+  if (null === parse_url($result, PHP_URL_SCHEME))
+  {
+    $result = ((is_https()) ? 'https' : 'http') . '://' . $result;
+  }
+
+  // Add a trailing '/' if there isn't one
   if (($result !== '') && (substr($result, -1) !== '/'))
   {
     $result .= '/';
@@ -628,7 +615,7 @@ function url_base()
 
 
 
-function is_https()
+function is_https() : bool
 {
   global $server;
 
@@ -653,12 +640,9 @@ function is_https()
 
 // Returns the current page.   If the page ends in $suffix this will be cut off.
 // The existing query string is optionally added.
-function this_page($with_query_string=false, $suffix=null)
+function this_page(bool $with_query_string=false, string $suffix='') : string
 {
   global $server;
-
-  assert(is_bool($with_query_string), '$with_query_string should be a boolean');
-  assert(is_null($suffix) || is_string($suffix), '$suffix should be null or a string');
 
   if ((!isset($server['SCRIPT_NAME']) || ($server['SCRIPT_NAME'] === '') && !is_cli()))
   {
@@ -695,15 +679,15 @@ function this_page($with_query_string=false, $suffix=null)
 // Format a timestamp in RFC 1123 format, for HTTP headers
 //
 // e.g. Wed, 28 Jul 2010 12:43:58 GMT
-function rfc1123_date($timestamp)
+function rfc1123_date(int $timestamp) : string
 {
-  return gmdate("D, d M Y G:i:s \\G\\M\\T",$timestamp);
+  return gmdate("D, d M Y G:i:s \\G\\M\\T", $timestamp);
 }
 
 
 // Rebuilds a url that has been decompomosed into parts by parse_url().
 // See https://www.php.net/manual/en/function.parse-url.php#106731
-function build_url(array $parts)
+function build_url(array $parts) : string
 {
     return (isset($parts['scheme']) ? "{$parts['scheme']}:" : '') .
           ((isset($parts['user']) || isset($parts['host'])) ? '//' : '') .
@@ -719,9 +703,16 @@ function build_url(array $parts)
 
 
 // A wrapper for sending a Location header.  This function will urlencode and add
-// the site parameter as necesary
-function location_header($location)
+// the site parameter as necessary
+function location_header(string $location) : void
 {
+  global $debug;
+
+  if ($debug && (version_compare(MRBS_MIN_PHP_VERSION, '8.1') >= 0))
+  {
+    trigger_error("The return type can be changed to 'never'.", E_USER_NOTICE);
+  }
+
   // Add the site parameter if necessary
   $location = multisite($location);
 
@@ -739,28 +730,54 @@ function location_header($location)
 }
 
 
-function add_query_parameter($location, $name, $value)
+function add_query_parameter(string $location, string $name, $value) : string
 {
   $parts = parse_url($location);
+
+  if ($parts === false)
+  {
+    throw new \Exception("Could not parse the URL '$location'");
+  }
+
   if (!isset($parts['query']))
   {
     $parts['query'] = '';
   }
+
   parse_str($parts['query'], $result);
   $result[$name] = $value;
   $parts['query'] = http_build_query($result, '', '&');
-  $location = build_url($parts);
+  return build_url($parts);
+}
 
-  return $location;
+
+function remove_query_parameter(string $location, string $name) : string
+{
+  $parts = parse_url($location);
+
+  if ($parts === false)
+  {
+    throw new \Exception("Could not parse the URL '$location'");
+  }
+
+  if (!isset($parts['query']))
+  {
+    $parts['query'] = '';
+  }
+
+  parse_str($parts['query'], $result);
+  unset($result[$name]);
+  $parts['query'] = http_build_query($result, '', '&');
+  return build_url($parts);
 }
 
 
 // Adds the site parameter in the query string if necessary
-function multisite($location)
+function multisite(string $location) : string
 {
   global $multisite, $site;
 
-  // Add the site, if there one, to the query string
+  // Add the site, if there is one, to the query string
   if ($multisite && isset($site) && ($site !== ''))
   {
     return add_query_parameter($location, 'site', $site);
@@ -772,9 +789,10 @@ function multisite($location)
 
 // Add a version parameter to a filename in order to force the use of the new
 // file instead of the cached version
-function add_version($filename)
+function add_version(string $filename) : string
 {
   $url_path = parse_url($filename, PHP_URL_PATH);
+
   if (is_readable($url_path))
   {
     $mtime = filemtime($url_path);
@@ -783,6 +801,7 @@ function add_version($filename)
       return add_query_parameter($filename, 'v', $mtime);
     }
   }
+
   return $filename;
 }
 
@@ -790,7 +809,7 @@ function add_version($filename)
 // A little helper function to send an "Expires" header. Just one
 // parameter, the number of seconds in the future to set the expiry.
 // If $seconds is <= 0, then caching is disabled.
-function expires_header($seconds)
+function expires_header(int $seconds) : void
 {
   global $debug;
 
@@ -815,7 +834,7 @@ function expires_header($seconds)
 // Outputs the HTTP headers, passed in the array $headers, followed by
 // a set of headers to set the cache expiry date.  If $expiry_seconds <= 0
 // then caching is disabled.
-function http_headers(array $headers, $expiry_seconds=0)
+function http_headers(array $headers, int $expiry_seconds=0) : void
 {
   foreach ($headers as $header)
   {
@@ -829,9 +848,9 @@ function http_headers(array $headers, $expiry_seconds=0)
 // Prints a very simple header.  This may be necessary on occasions, such as
 // during a database upgrade, when some of the features that the normal
 // header uses are not yet available.
-function print_simple_header()
+function print_simple_header() : void
 {
-  print_header($context=null, $simple=true);
+  print_header(null, true);
 }
 
 
@@ -839,7 +858,7 @@ function print_simple_header()
 // $context is an associative array indexed by 'view', 'view_all', 'year', 'month', 'day', 'area' and 'room',
 // any of which can be NULL.
 // When $omit_login is true the Login link is omitted.
-function print_header($context=null, $simple=false, $omit_login=false)
+function print_header(?array $context=null, bool $simple=false, bool $omit_login=false) : void
 {
   global $theme;
 
@@ -870,7 +889,7 @@ function print_header($context=null, $simple=false, $omit_login=false)
 
 // Print the standard footer, currently very simple.  Pass $and_exit as
 // TRUE to exit afterwards
-function print_footer($and_exit=false)
+function print_footer(bool $and_exit=false) : void
 {
   global $theme;
 
@@ -900,7 +919,7 @@ function print_footer($and_exit=false)
 // is used to specify a maximum size of unit to use.  For example if
 // it is set to 'minutes', 3600 seconds will give 60 minutes rather
 // than 1 hour.
-function toTimeString(&$dur, &$units, $translate=true, $max_unit=null)
+function toTimeString(int &$dur, &$units, bool $translate=true, ?string $max_unit=null)
 {
   if (!isset($max_unit))
   {
@@ -1000,48 +1019,55 @@ function fromTimeString(&$units, $dur_units)
 
 // Gets the interval in periods for a booking with $start_time and $end_time
 // Takes account of DST
-function get_period_interval($start_time, $end_time)
+function get_period_interval(int $start_time, int $end_time, int $area_id) : int
 {
-  global $periods;
+  static $area_details = [];
 
-  $periods_per_day = count($periods);
+  if (!isset($area_details[$area_id]))
+  {
+    $area_details[$area_id] = get_area_details($area_id);
+  }
 
-  // Need to use the MRBS version of DateTime to get round a bug in modify()
-  // in PHP before 5.3.6.  As we are in the MRBS namespace we will get the
-  // MRBS version.
+  $periods_per_day = count(json_decode($area_details[$area_id]['periods']));
+  $date_time_zone = new DateTimeZone($area_details[$area_id]['timezone']);
+
+  // Create start and end dates and set both dates to noon so that we can compare them
+  // and get an integral number of days difference.  Noon also happens to be when
+  // periods start, so will be useful in a moment.
   $startDate = new DateTime();
-  $startDate->setTimestamp($start_time);
-  $endDate = new DateTime();
-  $endDate->setTimestamp($end_time);
+  $startDate
+    ->setTimezone($date_time_zone)
+    ->setTimestamp($start_time)
+    ->modify('12:00');
 
-  // Set both dates to noon so that we can compare them and get an integral
-  // number of days difference.  Noon also happens to be when periods start,
-  // so will be useful in a moment.
-  $startDate->modify('12:00');
-  $endDate->modify('12:00');
+  $endDate = new DateTime();
+  $endDate
+    ->setTimezone($date_time_zone)
+    ->setTimestamp($end_time)
+    ->modify('12:00');
 
   // Calculate the difference in days
   $interval = $startDate->diff($endDate);
-  $interval_days = $interval->format('%a');
+  $interval_days = intval($interval->format('%a'));
 
-  if ($interval_days == 0)
+  if ($interval_days === 0)
   {
-    // If the interval starts and ends on the same day, the we just calculate the number
+    // If the interval starts and ends on the same day, then we just calculate the number
     // of periods by calculating the number of minutes between the start and end times.
     $result = ($end_time - $start_time)/60;
   }
   else
   {
     // Otherwise we calculate the number of periods on the first day
-    $startDate->add(new \DateInterval('PT' . $periods_per_day . 'M'));
-    $result = get_period_interval($start_time, $startDate->getTimestamp());
+    $startDate->add(new DateInterval('PT' . $periods_per_day . 'M'));
+    $result = get_period_interval($start_time, $startDate->getTimestamp(), $area_id);
     // Add in the number of whole days worth of periods in between
     $result += ($interval_days - 1) * $periods_per_day;
     // And add in the number of periods on the last day
-    $result += get_period_interval($endDate->getTimestamp(), $end_time);
+    $result += get_period_interval($endDate->getTimestamp(), $end_time, $area_id);
   }
 
-  return (int)$result;
+  return (int) $result;
 }
 
 
@@ -1117,25 +1143,11 @@ function fromPeriodString($start_period, &$units, $dur_units)
 }
 
 
-// Splits a BYDAY string into its ordinal and day parts, returned as a simple array.
-// For example "-1SU" is returned as array("-1", "SU");
-function byday_split($byday)
-{
-  $result = array();
-  $split_pos = strlen($byday) -2;
-  $result[] = substr($byday, 0, $split_pos);
-  $result[] = substr($byday, $split_pos, 2);
-  return $result;
-}
-
-
 // Returns the BYDAY value for a given timestamp, eg 4SU for fourth Sunday in
 // the month, or -1MO for the last Monday.
-function date_byday($timestamp)
+function date_byday(int $timestamp) : string
 {
-  global $RFC_5545_days;
-
-  $dow = $RFC_5545_days[date('w', $timestamp)];
+  $dow = RFC5545::DAYS[date('w', $timestamp)];
   $dom = date('j', $timestamp);
   $ord = intval(($dom - 1)/DAYS_PER_WEEK) + 1;
   if ($ord == 5)
@@ -1146,21 +1158,10 @@ function date_byday($timestamp)
 }
 
 
-// Convert an RFC 5545 day to an ordinal number representing the day of the week,
-// eg "MO" returns "1"
-function RFC_5545_day_to_ord($day)
-{
-  global $RFC_5545_days;
-
-  $tmp = array_keys($RFC_5545_days, $day);
-  return $tmp[0];
-}
-
-
 // Converts a BYDAY (eg "2SU") value for a given year and month into a
 // day of the month.   Returns FALSE if the day does not exist (eg for "5SU"
 // when there are only four Sundays in the month)
-function byday_to_day($year, $month, $byday)
+function byday_to_day(int $year, int $month, string $byday)
 {
   // First of all normalise the month and year, as we allow $month > 12
   while ($month > 12)
@@ -1169,13 +1170,13 @@ function byday_to_day($year, $month, $byday)
     $year++;
   }
   // Get the ordinal number and the day of the week
-  list($ord, $dow) = byday_split($byday);
+  list('ordinal' => $ord, 'day' => $dow) = RFC5545::parseByday($byday);
   // Get the starting day of the month
   $start_dom = ($ord > 0) ? 1 : date('t', mktime(0, 0, 0, $month, 1, $year));
   // Get the starting day of the week
   $start_dow = date('w', mktime(0, 0, 0, $month, $start_dom, $year));
   // Turn the BYDAY day of the week into an integer
-  $byday_dow = RFC_5545_day_to_ord($dow);
+  $byday_dow = RFC5545::convertDayToOrd($dow);
   // get the difference in days
   $diff = $byday_dow - $start_dow;
   $diff += ($ord > 0) ? DAYS_PER_WEEK : -DAYS_PER_WEEK;
@@ -1200,7 +1201,7 @@ function byday_to_day($year, $month, $byday)
 // $hm1 and $hm2 are associative arrays indexed by 'hours' and 'minutes'.
 // The indices are chosen to allow the result of the PHP getdate() function
 // to be passed as parameters
-function hm_before($hm1, $hm2)
+function hm_before(array $hm1, array $hm2) : bool
 {
   return ($hm1['hours'] < $hm2['hours']) ||
          (($hm1['hours'] == $hm2['hours']) && ($hm1['minutes'] < $hm2['minutes']));
@@ -1209,7 +1210,7 @@ function hm_before($hm1, $hm2)
 
 // Returns TRUE if the end of the last slot is on the day after the beginning
 // of the first slot
-function day_past_midnight()
+function day_past_midnight() : bool
 {
   global $morningstarts, $morningstarts_minutes, $eveningends, $eveningends_minutes, $resolution;
 
@@ -1222,53 +1223,71 @@ function day_past_midnight()
 
 
 // Gets the UNIX timestamp for the start of the first slot on the given day
-function get_start_first_slot($month, $day, $year)
+function get_start_first_slot(int $month, int $day, int $year) : int
 {
   global $morningstarts, $morningstarts_minutes, $enable_periods;
 
   if ($enable_periods)
   {
-    return mktime(12, 0, 0, $month, $day, $year);
+    $result = mktime(12, 0, 0, $month, $day, $year);
+  }
+  else
+  {
+    $result = mktime($morningstarts, $morningstarts_minutes, 0,
+                     $month, $day, $year);
   }
 
-  return mktime($morningstarts, $morningstarts_minutes, 0,
-                $month, $day, $year);
+  if ($result === false)
+  {
+    throw new \Exception("Invalid arguments to mktime()");
+  }
+
+  return $result;
 }
 
 
 // Gets the UNIX timestamp for the start of the last slot on the given day
-function get_start_last_slot($month, $day, $year)
+function get_start_last_slot(int $month, int $day, int $year) : int
 {
   global $morningstarts, $morningstarts_minutes, $eveningends, $eveningends_minutes, $enable_periods, $periods;
 
   if ($enable_periods)
   {
-    return mktime(12, count($periods) -1, 0, $month, $day, $year);
+    $result = mktime(12, count($periods) -1, 0, $month, $day, $year);
   }
-
-  // Work out if $evening_ends is really on the next day
-  if (hm_before(array('hours' => $eveningends, 'minutes' => $eveningends_minutes),
-                array('hours' => $morningstarts, 'minutes' => $morningstarts_minutes)))
+  else
   {
-    $day++;
+    // Work out if $evening_ends is really on the next day
+    if (hm_before(array('hours' => $eveningends, 'minutes' => $eveningends_minutes),
+        array('hours' => $morningstarts, 'minutes' => $morningstarts_minutes)))
+    {
+      $day++;
+    }
+
+    $result = mktime($eveningends, $eveningends_minutes, 0,
+                     $month, $day, $year);
   }
 
-  return mktime($eveningends, $eveningends_minutes, 0,
-                $month, $day, $year);
+  if ($result === false)
+  {
+    throw new \Exception("Invalid arguments to mktime()");
+  }
+
+  return $result;
 }
 
 
-function get_end_last_slot($month, $day, $year)
+function get_end_last_slot(int $month, int $day, int $year) : int
 {
   global $resolution;
 
-  return get_start_last_slot($month, $day, $year) + $resolution;
+  return intval(get_start_last_slot($month, $day, $year) + $resolution);
 }
 
 
 // Determines with a given timestamp is within a booking day, ie between the start of
 // the first slot and end of the last slot.   Returns a boolean.
-function is_in_booking_day($t)
+function is_in_booking_day(int $t) : bool
 {
   global $morningstarts, $morningstarts_minutes,
          $eveningends, $eveningends_minutes,
@@ -1302,21 +1321,21 @@ function is_in_booking_day($t)
 
 // Takes a Unix timestamp and sets the time, while keeping the day the same.
 // $time is a string in hh:mm format (24 hour clock)
-function timestamp_set_time($timestamp, $time)
+function timestamp_set_time(int $timestamp, string $time) : int
 {
   list($hour, $minute) = explode(':', $time);
   $hour = intval($hour);
   $minute = intval($minute);
   $date = new DateTime();
   $date->setTimestamp($timestamp);
-  $date->setTime($hour, $minute, 0);
+  $date->setTime($hour, $minute);
   return $date->getTimestamp();
 }
 
 
 // Force a timestamp $t to be on a booking day, either by moving it back to the end
 // of the previous booking day, or forward to the start of the next.
-function fit_to_booking_day($t, $back=true)
+function fit_to_booking_day(int $t, bool $back=true) : int
 {
   if (is_in_booking_day($t))
   {
@@ -1356,7 +1375,7 @@ function fit_to_booking_day($t, $back=true)
 //    $end_time       int     end time as a Unix timestamp
 //    $enable_periods boolean whether we are using periods
 //    $translate      boolean whether to translate into the browser language
-function get_duration($start_time, $end_time, $enable_periods, $area_id, $translate=true)
+function get_duration(int $start_time, int $end_time, bool $enable_periods, int $area_id, bool $translate=true) : array
 {
   $result = array();
 
@@ -1365,7 +1384,7 @@ function get_duration($start_time, $end_time, $enable_periods, $area_id, $transl
   if ($enable_periods)
   {
     $periods_per_day = count($period_names[$area_id]);
-    $n_periods = get_period_interval($start_time, $end_time);  // this handles DST
+    $n_periods = get_period_interval($start_time, $end_time, $area_id);  // this handles DST
     if (($n_periods % $periods_per_day) == 0)
     {
       $result['duration'] =  intval($n_periods/$periods_per_day);
@@ -1393,7 +1412,7 @@ function get_duration($start_time, $end_time, $enable_periods, $area_id, $transl
 //
 // Based on a function contributed by kongaspar at gmail dot com at
 // http://www.php.net/manual/function.addcslashes.php
-function escape_js($str)
+function escape_js(string $str) : string
 {
   return addcslashes($str, "\\\'\"&\n\r<>/");
 }
@@ -1404,7 +1423,7 @@ function escape_js($str)
 // first area in alphabetical order in the database (no guarantee there is an area 1).
 // The area must be enabled for it to be considered.
 // This could be changed to implement something like per-user defaults.
-function get_default_area()
+function get_default_area() : int
 {
   global $default_room;
 
@@ -1431,7 +1450,7 @@ function get_default_area()
 
     if ($area >= 0)
     {
-      return $area;
+      return (int) $area;
     }
   }
 
@@ -1455,7 +1474,7 @@ function get_default_area()
   {
     if (is_visible($row['id']))
     {
-      return $row['area_id'];
+      return (int) $row['area_id'];
     }
   }
 
@@ -1467,7 +1486,7 @@ function get_default_area()
 // user, then it returns $default_room. Otherwise it returns the first visible room
 // in sort_key order in the database.
 // This could be changed to implement something like per-user defaults.
-function get_default_room($area)
+function get_default_room(int $area) : int
 {
   global $default_room;
 
@@ -1493,19 +1512,19 @@ function get_default_room($area)
 
     if (($room >= 0) && is_visible($room))
     {
-      return $room;
+      return (int) $room;
     }
   }
 
   // Otherwise just return the first visible room in the area
   $rooms = get_rooms($area, !$disabled_field_exists);
 
-  return (count($rooms) > 0) ? $rooms[0]['id'] : 0;
+  return (count($rooms) > 0) ? (int) $rooms[0]['id'] : 0;
 }
 
 
 // Return an area id for a given room
-function get_area($room)
+function get_area(int $room) : int
 {
   $sql = "SELECT area_id
             FROM " . _tbl('room') . "
@@ -1514,36 +1533,45 @@ function get_area($room)
 
   $area = db()->query1($sql, array($room));
 
-  return ($area < 0 ? 0 : $area);
+  return ($area < 0 ? 0 : (int) $area);
 }
 
 
 // Clean up a row from the area table, making sure there are no nulls, casting
 // boolean fields into bools and doing some sanity checking
-function clean_area_row($row)
+function clean_area_row(array $row) : array
 {
-  global $force_resolution, $area_defaults, $boolean_fields, $private_override_options;
+  global $force_resolution, $area_defaults, $private_override_options;
 
   // This code can get called during the upgrade process and so must
   // not make any assumptions about the existence of extra columns in
   // the area table.
-  foreach ($row as $key => $value)
+
+  // Cast the columns to their intended types (the pseudo-booleans will
+  // be picked up later)
+  row_cast_columns($row, 'area');
+
+  // Get the default settings if necessary
+  $columns = Columns::getInstance(_tbl('area'));
+
+  foreach ($columns as $column)
   {
-    if (array_key_exists($key, $area_defaults))
+    // Cast the pseudo-booleans to bools
+    if (isset($row[$column->name]) && ($column->getNature() == Column::NATURE_INTEGER) && ($column->getLength() <=2))
     {
-      // If the "per area" setting is in the database, then use that.   Otherwise
+      $row[$column->name] = (bool)$row[$column->name];
+    }
+
+    if (array_key_exists($column->name, $area_defaults))
+    {
+      // If the "per area" setting is in the database, then use that.  Otherwise
       // just stick with the default setting from the config file.
       // (don't use the database setting if $force_resolution is TRUE
       // and we're looking at the resolution field)
-      if (!isset($row[$key]) ||
-          (($key == 'resolution') && !empty($force_resolution) && empty($row['enable_periods'])) )
+      if (!isset($row[$column->name]) ||
+          (($column->name == 'resolution') && !empty($force_resolution) && empty($row['enable_periods'])) )
       {
-        $row[$key] = $area_defaults[$key];
-      }
-      // Cast those fields which are booleans into booleans
-      if (in_array($key, $boolean_fields['area']))
-      {
-        $row[$key] = (bool) $row[$key];
+        $row[$column->name] = $area_defaults[$column->name];
       }
     }
   }
@@ -1554,7 +1582,7 @@ function clean_area_row($row)
       !in_array($row['private_override'], $private_override_options))
   {
     $row['private_override'] = 'private';  // the safest default
-    $message = "Invalid value for 'private_override' in the area table.  Using '${row['private_override']}'.";
+    $message = "Invalid value for 'private_override' in the area table.  Using '{$row['private_override']}'.";
     trigger_error($message, E_USER_WARNING);
   }
   // (2) 'resolution' must be positive
@@ -1562,7 +1590,7 @@ function clean_area_row($row)
       (empty($row['resolution']) || ($row['resolution'] < 0)))
   {
     $row['resolution'] = 30*60;  // 30 minutes, a reasonable fallback
-    $message = "Invalid value for 'resolution' in the area table.   Using ${row['resolution']} seconds.";
+    $message = "Invalid value for 'resolution' in the area table.   Using {$row['resolution']} seconds.";
     trigger_error($message, E_USER_WARNING);
   }
 
@@ -1573,7 +1601,7 @@ function clean_area_row($row)
 // Update the default area settings with the ones specific to this area.
 // If no value is set in the database, use the value from the config file.
 // If $area is empty, use the default area
-function get_area_settings($area)
+function get_area_settings(int $area) : void
 {
   global $auth;
   global $resolution, $default_duration, $default_duration_all_day;
@@ -1661,25 +1689,25 @@ function get_area_settings($area)
   // arrays, which are handled slightly differently
   foreach ($interval_types as $interval_type)
   {
-    $var = "max_per_${interval_type}_enabled";
+    $var = "max_per_{$interval_type}_enabled";
     if (isset($$var))
     {
       $max_per_interval_area_enabled[$interval_type] = $$var;
     }
 
-    $var = "max_per_${interval_type}";
+    $var = "max_per_$interval_type";
     if (isset($$var))
     {
       $max_per_interval_area[$interval_type] = $$var;
     }
 
-    $var = "max_secs_per_${interval_type}_enabled";
+    $var = "max_secs_per_{$interval_type}_enabled";
     if (isset($$var))
     {
       $max_secs_per_interval_area_enabled[$interval_type] = $$var;
     }
 
-    $var = "max_secs_per_${interval_type}";
+    $var = "max_secs_per_$interval_type";
     if (isset($$var))
     {
       $max_secs_per_interval_area[$interval_type] = $$var;
@@ -1710,9 +1738,9 @@ function get_area_settings($area)
 }
 
 
-// generate the predicate for use in an SQL query to test whether
+// Generate the predicate for use in an SQL query to test whether
 // an area has $field set
-function some_area_predicate($field)
+function some_area_predicate(string $field) : string
 {
   global $area_defaults;
 
@@ -1724,24 +1752,57 @@ function some_area_predicate($field)
   return $predicate;
 }
 
+
+// Generate the predicate for use in an SQL query to test whether
+// an area does not have $field set
+function some_area_predicate_not(string $field) : string
+{
+  global $area_defaults;
+
+  $predicate = "(($field IS NOT NULL) AND ($field = 0))";
+  if (empty($area_defaults[$field]))
+  {
+    $predicate = "(" . $predicate . " OR ($field IS NULL))";
+  }
+  return $predicate;
+}
+
+
 // Determines whether there is at least one area with the relevant $field
-// set (eg 'approval_enabled' or 'confirmation_enabled').   If $enabled
+// set (eg 'approval_enabled' or 'confirmation_enabled').   If $only_enabled
 // is TRUE then the search is limited to enabled areas
 //
 // Returns: boolean
-function some_area($field, $enabled=false)
+function some_area(string $field, bool $only_enabled=false, bool $not=false) : bool
 {
-  $predicate = some_area_predicate($field);
+  $predicate = ($not) ? some_area_predicate_not($field) : some_area_predicate($field);
   $sql = "SELECT COUNT(*) FROM " . _tbl('area') . " WHERE $predicate";
-  $sql .= ($enabled) ? " AND disabled=0" : "";
+  $sql .= ($only_enabled) ? " AND disabled=0" : "";
   $sql .= " LIMIT 1";
+
   return (db()->query1($sql) > 0);
+}
+
+
+// Determines whether there is at least one area with periods enabled.
+// If $only_enabled is TRUE then the search is limited to enabled areas
+function periods_somewhere(bool $only_enabled=false) : bool
+{
+  return some_area('enable_periods', $only_enabled);
+}
+
+
+// Determines whether there is at least one area with times enabled.
+// If $only_enabled is TRUE then the search is limited to enabled areas
+function times_somewhere(bool $only_enabled=false) : bool
+{
+  return some_area('enable_periods', $only_enabled, true);
 }
 
 
 // Returns a date in ISO 8601 format ('yyyy-mm-dd'), having adjusted the date if necessary
 // to make sure it's a valid date
-function format_iso_date($year, $month, $day)
+function format_iso_date(int $year, int $month, int $day) : string
 {
   if (!checkdate($month, $day, $year))
   {
@@ -1756,88 +1817,108 @@ function format_iso_date($year, $month, $day)
 
 
 // Splits a date in ISO 8601 format ('yyyy-mm-dd') and returns an
-// array of year, month, day with leading zeros removed.
-function split_iso_date($date)
+// array of year, month, day with leading zeros removed, or FALSE
+// on failure.
+function split_iso_date(string $iso_date)
 {
-  // Split the date into components, sanitize the result and trim any leading zeros
-  // If the date is malformed, pad it out with nulls so that three elements are returned.
-  $result = array_pad(explode('-', $date, 3), 3, null);
-
-  foreach ($result as &$value)
+  if (false === ($date = DateTime::createFromFormat('Y-m-d', $iso_date)))
   {
-    if (isset($value))
+    return false;
+  }
+
+  return array(
+    (int) $date->format('Y'),
+    (int) $date->format('n'),
+    (int) $date->format('j')
+  );
+}
+
+
+// Validates that a string is a valid ISO date in yyyy-mm-dd format
+function validate_iso_date(string $date) : bool
+{
+  // Try creating a DateTime object.  If that is successful and
+  // the inverse operation gives the original string then it is
+  // valid.  (This is to check that, for example, 2021-09-31 hasn't
+  // been converted into 2021-10-01).
+  $format = 'Y-m-d';
+  $datetime = DateTime::createFromFormat($format, $date);
+
+  return ($datetime && ($datetime->format($format) === $date));
+}
+
+
+// Get the local day name based on language.
+function day_name(int $day_number, ?array $format=null, ?string $locale=null) : string
+{
+  global $datetime_formats;
+
+  if (!isset($format))
+  {
+    $format = $datetime_formats['day_name'];
+  }
+
+  // Note 2000-01-02 is a Sunday.
+  return datetime_format($format, mktime(0,0,0,1,2+$day_number,2000), $locale);
+}
+
+
+// Gets the monthly repeat day for an entry, for example "20" or "second Wednesday"
+function get_monthly_repeat_day(array $data) : string
+{
+  // Fix up the keys while we're still transitioning to the RepeatRule
+  if (isset($data['repeat_rule']))
+  {
+    $repeat_rule = $data['repeat_rule'];
+    if ($repeat_rule->getMonthlyType() == RepeatRule::MONTHLY_ABSOLUTE)
     {
-      $value = filter_var($value, FILTER_SANITIZE_NUMBER_INT);
-      $value = ($value === '') ? null : (int) ltrim($value, '0');
+      $data['month_absolute'] = $repeat_rule->getMonthlyAbsolute();
+    }
+    else
+    {
+      $data['month_relative'] = $repeat_rule->getMonthlyRelative();
     }
   }
 
-  unset($value);  // Break the reference (not necessary here, but good practice)
+  if (isset($data['month_absolute']))
+  {
+    $result = (string) $data['month_absolute'];
+  }
+  elseif (isset($data['month_relative']))
+  {
+    // Note: this does not internationalise very well and could do with revisiting.
+    // It follows the select box order in edit_entry, which is the more difficult one
+    // to sort out.  It assumes all languages have the same order as English
+    // eg "the second Wednesday" which is probably not true.
+    list('ordinal' => $ord, 'day' => $dow) = RFC5545::parseByday($data['month_relative']);
+    $result = get_vocab("ord_" . $ord) . " " . day_name(RFC5545::convertDayToOrd($dow));
+  }
+  else
+  {
+    throw new Exception("Unknown monthly repeat type");
+  }
 
   return $result;
 }
 
 
-// Get the local day name based on language. Note 2000-01-02 is a Sunday.
-function day_name($daynumber, $format=null)
+function hour_min_format() : array
 {
-  global $strftime_format;
+  global $datetime_formats;
 
-  if (!isset($format))
-  {
-    $format = $strftime_format['dayname'];
-  }
-
-  return utf8_strftime($format, mktime(0,0,0,1,2+$daynumber,2000));
-}
-
-// Returns a list of repeat days as a string (eg "Thursday Friday")
-//
-//    $rep_opt     an array of repeat days or
-//                 a string of repeat days that can be used as an array
-function get_rep_day_list($rep_opt)
-{
-  global $weekstarts;
-
-  $rep_days = array();
-
-  for ($i=0; $i<DAYS_PER_WEEK; $i++)
-  {
-    $daynum = ($i + $weekstarts) % DAYS_PER_WEEK;
-    if (isset($rep_opt[$daynum]) && $rep_opt[$daynum])
-    {
-      $rep_days[] = day_name($daynum);
-    }
-  }
-
-  return implode(' ', $rep_days);
-}
-
-
-function hour_min_format()
-{
-  global $twentyfourhour_format, $strftime_format;
-
-  if ($twentyfourhour_format)
-  {
-    return $strftime_format['time24'];
-  }
-  else
-  {
-    return $strftime_format['time12'];
-  }
+  return $datetime_formats['time'];
 }
 
 
 // Returns a string representing the hour and minute for the nominal
 // seconds since the start of the day, $s
-function hour_min($s)
+function hour_min(int $s) : string
 {
   $following_day = ($s >= SECONDS_PER_DAY);
   $s = $s % SECONDS_PER_DAY;  // in case $s is on the next day
   // Choose a day that doesn't have any DST transitions in any timezone
   $t = mktime(0, 0, $s, 1, 1, 2000);
-  $result = utf8_strftime(hour_min_format(), $t);
+  $result = datetime_format(hour_min_format(), $t);
   if ($following_day)
   {
     $result = "* " . $result;
@@ -1846,29 +1927,30 @@ function hour_min($s)
 }
 
 
-function period_date_string($t, $area_id, $mod_time=0)
+function period_date_string(int $t, int $area_id, bool $previous_period=false) : array
 {
-  global $strftime_format;
+  global $datetime_formats;
 
-  $period_names = get_period_names();
-
+  $period_names = get_period_names()[$area_id];
+  $n_periods = count($period_names);
   $time = getdate($t);
-  $p_num = $time["minutes"] + $mod_time;
-  if( $p_num < 0 )
+  $p = $time['minutes'];
+
+  if ($previous_period)
   {
-    $p_num = 0;
+    $p--;
   }
-  if( $p_num >= count($period_names[$area_id]) - 1 )
-  {
-    $p_num = count($period_names[$area_id]) - 1;
-  }
+
+  $p = max($p, 0);
+  $p = min($p, $n_periods - 1);
+
   // The separator is a ',' as a '-' leads to an ambiguous
   // display in report.php when showing end times.
-  return array($p_num, $period_names[$area_id][$p_num] . utf8_strftime(", " . $strftime_format['date'], $t));
+  return array($p, $period_names[$p] . ', ' . datetime_format($datetime_formats['date'], $t));
 }
 
 
-function period_time_string($t, $area_id, $mod_time=0)
+function period_time_string(int $t, int $area_id, int $mod_time=0) : string
 {
   $period_names = get_period_names();
 
@@ -1885,46 +1967,31 @@ function period_time_string($t, $area_id, $mod_time=0)
   return $period_names[$area_id][$p_num];
 }
 
-function time_date_string($t)
+function time_date_string(int $t) : string
 {
-  global $twentyfourhour_format, $strftime_format;
+  global $datetime_formats;
 
-  if ($twentyfourhour_format)
-  {
-    return utf8_strftime($strftime_format['datetime24'], $t);
-  }
-  else
-  {
-    return utf8_strftime($strftime_format['datetime12'], $t);
-  }
+  return datetime_format($datetime_formats['date_and_time'], $t);
 }
 
-// version of the standard PHP function nl2br() that takes account of the fact
-// that the optional second parameter is only available from PHP 5.3.0 onwards.
-function mrbs_nl2br($string)
+// Wrapper for the standard PHP function nl2br() that sets $use_xhtml to false
+function mrbs_nl2br(string $string) : string
 {
-  if (function_exists('version_compare') && version_compare(PHP_VERSION, '5.3.0', 'ge'))
-  {
-    return nl2br($string, IS_XHTML);
-  }
-  else
-  {
-    return nl2br($string);
-  }
+  return nl2br($string, false);
 }
 
 
 // Take a string of email addresses separated by commas
 // and return a comma separated list with duplicates removed.
-function clean_address_list($string)
+function clean_address_list(string $string) : string
 {
   $array = explode(',', $string);
-  array_walk($array, 'trim');
+  $array = array_map('trim', $array);
   return implode(', ', array_unique($array));
 }
 
 
-function validate_email($email)
+function validate_email(string $email) : bool
 {
   return PHPMailer::validateAddress($email);
 }
@@ -1933,9 +2000,9 @@ function validate_email($email)
 // Validates a comma separated list of email addresses.  (The individual email
 // addresses are 'trimmed' before validation, so spaces are allowed after the commas).
 // Returns FALSE if any one of them is invalid, otherwise TRUE
-function validate_email_list($list)
+function validate_email_list(string $list) : bool
 {
-  if (isset($list) && ($list !== ''))
+  if ($list !== '')
   {
     $emails = explode(',', $list);
     foreach ($emails as $email)
@@ -1953,7 +2020,7 @@ function validate_email_list($list)
 
 // Parses an email address and returns an array indexed by 'local' and 'domain',
 // or FALSE if the email address is not valid.
-function parse_email($email)
+function parse_email(string $email)
 {
   if (!filter_var($email, FILTER_VALIDATE_EMAIL))
   {
@@ -1970,31 +2037,59 @@ function parse_email($email)
 
 
 // Round time down to the nearest resolution
-function round_t_down($t, $resolution, $am7)
+function round_t_down(int $t, int $resolution, int $start_first_slot) : int
 {
-  return (int)$t - (int)abs(((int)$t-(int)$am7)
-                            % $resolution);
+  // The simple case when no DST transition is involved
+  if (cross_dst($start_first_slot, $t) == 0)
+  {
+    return $t - (int)abs(($t - $start_first_slot) % $resolution);
+  }
+  // Otherwise we have to pay attention to DST transitions
+  $date = new DateTime();
+  $date->setTimestamp($start_first_slot);
+  $nominal_seconds = nominal_seconds($start_first_slot);
+  // Keep advancing the slot until we find the one that is closest to $t
+  do {
+    $candidate_slot = $date->getTimestamp();
+    $nominal_seconds += $resolution;
+    $date->setNominalSeconds($nominal_seconds);
+  } while ($date->getTimestamp() <= $t);
+
+  return $candidate_slot;
 }
 
 
 // Round time up to the nearest resolution
-function round_t_up($t, $resolution, $am7)
+function round_t_up(int $t, int $resolution, int $start_first_slot) : int
 {
-  if (($t-$am7) % $resolution != 0)
+  // The simple case when no DST transition is involved
+  if (cross_dst($start_first_slot, $t) == 0)
   {
-    return $t + $resolution - abs(((int)$t-(int)
-                                   $am7) % $resolution);
+    if (($t - $start_first_slot) % $resolution != 0) {
+      return $t + $resolution - abs(($t - $start_first_slot) % $resolution);
+    }
+    else {
+      return $t;
+    }
   }
-  else
-  {
-    return $t;
-  }
+  // Otherwise we have to pay attention to DST transitions
+  $date = new DateTime();
+  $date->setTimestamp($start_first_slot);
+  $nominal_seconds = nominal_seconds($start_first_slot);
+  // Keep advancing the slot until we find the one that is >= $t
+  do {
+    $candidate_slot = $date->getTimestamp();
+    $nominal_seconds += $resolution;
+    $date->setNominalSeconds($nominal_seconds);
+  } while ($candidate_slot < $t);
+
+  return $candidate_slot;
 }
 
 
 // Returns the nominal (ie ignoring DST transitions) seconds since the start of
 // the calendar day on the start of the booking day
-function nominal_seconds($t)
+function nominal_seconds(int $t) : int
 {
   global $morningstarts, $morningstarts_minutes;
 
@@ -2009,8 +2104,19 @@ function nominal_seconds($t)
 }
 
 
+// Returns the index of the period represented by the timestamp $timestamp
+function period_index_timestamp(int $timestamp) : int
+{
+  // Periods are counted as minutes from noon, ie 1200 is $period[0],
+  // 1201 $period[1], etc.
+  $date = getdate($timestamp);
+
+  return intval((($date['hours'] - 12) * 60) + $date['minutes']);
+}
+
+
 // Returns the index of the period represented by $s nominal seconds
-function period_index($s)
+function period_index_nominal(int $s) : int
 {
   // Periods are counted as minutes from noon, ie 1200 is $period[0],
   // 1201 $period[1], etc.
@@ -2019,18 +2125,36 @@ function period_index($s)
 
 
 // Returns the name of the period represented by nominal seconds $s
-function period_name($s)
+function period_name_nominal(int $s) : string
 {
   global $periods;
 
-  return $periods[period_index($s)];
+  return $periods[period_index_nominal($s)];
+}
+
+
+// Returns the name of the period represented by the timestamp $timestamp
+function period_name_timestamp(int $timestamp) : string
+{
+  global $periods;
+
+  $index = period_index_timestamp($timestamp);
+
+  return $periods[$index] ?? unknown_period_name($index);
+}
+
+
+// Returns the name of a period that doesn't exist
+function unknown_period_name(int $index) : string
+{
+  return get_vocab('unknown_period', $index);
 }
 
 
 // returns the numeric day of the week (0-6) in terms of the MRBS week as defined by
 // $weekstarts.   For example if $weekstarts is set to 2 (Tuesday) and a $time for
 // a Wednesday is given, then 1 is returned.
-function day_of_MRBS_week($time)
+function day_of_MRBS_week(int $time) : int
 {
   global $weekstarts;
 
@@ -2038,7 +2162,7 @@ function day_of_MRBS_week($time)
 }
 
 
-// Compares two nominal dates which are indexed by'hours', 'minutes', 'seconds',
+// Compares two nominal dates which are indexed by 'hours', 'minutes', 'seconds',
 // 'mon', 'mday' and 'year', ie as in the output of getdate().  Returns -1 if the
 // first date is before the second, 0 if they are equal and +1 if the first date
 // is after the second.   NULL if a comparison can't be done.
@@ -2046,7 +2170,7 @@ function day_of_MRBS_week($time)
 // (Note that internally the function uses gmmktime() so the parameters do not
 // have to represent valid values.   For example you could pass '32' for day and
 // that would be interpreted as 4 days after '28'.)
-function nominal_date_compare($d1, $d2)
+function nominal_date_compare(array $d1, array $d2) : int
 {
   // We compare the dates using gmmktime() because we are trying to compare nominal
   // dates and so do not want DST transitions
@@ -2072,7 +2196,7 @@ function nominal_date_compare($d1, $d2)
 // Determines whether there's a possibility that the interval between the two Unix
 // timestamps could contain nominal times that don't exist, for example from 0100 to
 // 0159 in Europe/London when entering DST.
-function is_possibly_invalid($start, $end)
+function is_possibly_invalid(int $start, int $end) : bool
 {
   // We err on the side of caution by widening the interval by a day at each end.   This
   // allows for the possibility that the start or end times have been calculated by using
@@ -2086,17 +2210,12 @@ function is_possibly_invalid($start, $end)
 // example from 0100 to 0159 in Europe/London.
 // Returns NULL if MRBS is unable to determine an answer, otherwise TRUE or FALSE (so
 // a simple equality test will default to a valid time if MRBS can't determine an answer)
-function is_invalid_datetime($hour, $minute, $second, $month, $day, $year, $tz=null)
+function is_invalid_datetime(int $hour, int $minute, int $second, int $month, int $day, int $year, ?string $tz=null) : ?bool
 {
   global $timezone;
 
   // Do a quick check to see if there's a possibility of an invalid time by checking
   // whether there's a transition into DST from the day before to the day after
-  if (!function_exists('date_default_timezone_set'))
-  {
-    return null;
-  }
-
   if (empty($tz))
   {
     $tz = $timezone;  // default to the current timezone
@@ -2123,45 +2242,36 @@ function is_invalid_datetime($hour, $minute, $second, $month, $day, $year, $tz=n
     }
     else
     {
-      // We are in a transition into DST, so we need to check more carefully.
-      // However we can only do this efficiently in PHP 5.3.0 or greater
-      if (version_compare(PHP_VERSION, '5.3.0') < 0)
+      $thisDateTimeZone = new DateTimeZone($tz);
+      // Get the transition data (we assume there is one and only one transition),
+      // in particular the time at which the transition happens and the new offset
+      $transitions = $thisDateTimeZone->getTransitions($dayBefore, $dayAfter);
+      // According to my reading of the PHP manual, getTransitions() should return
+      // all transitions between the start and end date.   However what it seems to do
+      // is return an array consisting of the time data for the start date followed by
+      // the transition data.   So as a precaution we take the last element of the array
+      // (we were only expecting one element, but seem to get two).
+      $transition = array_pop($transitions);
+      // If we failed for some reason to get any transition data, return NULL
+      if (!isset($transition))
       {
         $result = null;
       }
       else
       {
-        $thisDateTimeZone = new DateTimeZone($tz);
-        // Get the transition data (we assume there is one and only one transition),
-        // in particular the time at which the transition happens and the new offset
-        $transitions = $thisDateTimeZone->getTransitions($dayBefore, $dayAfter);
-        // According to my reading of the PHP manual, getTransitions() should return
-        // all transitions between the start and end date.   However what it seems to do
-        // is return an array consisting of the time data for the start date followed by
-        // the transition data.   So as a precaution we take the last element of the array
-        // (we were only expecting one element, but seem to get two).
-        $transition = array_pop($transitions);
-        // If we failed for some reason to get any transition data, return NULL
-        if (!isset($transition))
-        {
-          $result = null;
-        }
-        else
-        {
-          // Get the old offset and work out how many seconds the clocks change by
-          $beforeDateTime = new DateTime(date('c', $dayBefore), $thisDateTimeZone);
-          $change = $transition['offset'] - $beforeDateTime->getOffset();
+        // Get the old offset and work out how many seconds the clocks change by
+        $beforeDateTime = new DateTime(date('c', $dayBefore), $thisDateTimeZone);
+        $change = $transition['offset'] - $beforeDateTime->getOffset();
 
-          // See if the nominal date falls outside the gap
-          $lastValidSecond = getdate($transition['ts'] - 1);
-          $lastInvalidSecond = $lastValidSecond;
-          $lastInvalidSecond['seconds'] += $change;
-          $thisDate = array('hours' => $hour, 'minutes' => $minute, 'seconds' => $second,
-                            'mon' => $month, 'mday' => $day, 'year' => $year);
+        // See if the nominal date falls outside the gap
+        $lastValidSecond = getdate($transition['ts'] - 1);
+        $lastInvalidSecond = $lastValidSecond;
+        $lastInvalidSecond['seconds'] += $change;
+        $thisDate = array('hours' => $hour, 'minutes' => $minute, 'seconds' => $second,
+                          'mon' => $month, 'mday' => $day, 'year' => $year);
 
-          $result = ((nominal_date_compare($thisDate, $lastValidSecond) > 0) &&
-                     (nominal_date_compare($thisDate, $lastInvalidSecond) <= 0));
-        }
+        $result = ((nominal_date_compare($thisDate, $lastValidSecond) > 0) &&
+                   (nominal_date_compare($thisDate, $lastInvalidSecond) <= 0));
       }
     }
   }
@@ -2174,7 +2284,7 @@ function is_invalid_datetime($hour, $minute, $second, $month, $day, $year, $tz=n
 
 // Returns the modification (in seconds) necessary on account of any DST
 // transitions when going from $start to $end
-function cross_dst($start, $end)
+function cross_dst(int $start, int $end) : int
 {
   global $timezone;
 
@@ -2192,7 +2302,7 @@ function cross_dst($start, $end)
 
 // If $time falls on a non-working day, shift it back to the end of the last
 // working day before that
-function shift_to_workday($time)
+function shift_to_workday(int $time) : int
 {
   global $working_days;
 
@@ -2211,9 +2321,9 @@ function shift_to_workday($time)
   if ($skip_back != 0)
   {
     // set the time to the end of the working day
-    $d = date('j', $time) - $skip_back;
-    $m = date('n', $time);
-    $y  = date('Y', $time);
+    $d = intval(date('j', $time)) - $skip_back;
+    $m = intval(date('n', $time));
+    $y = intval(date('Y', $time));
     $time = mktime(23, 59, 59, $m, $d, $y);
   }
   return $time;
@@ -2221,7 +2331,7 @@ function shift_to_workday($time)
 
 // Returns the difference in seconds between two timestamps, $now and $then
 // It gives $now - $then, less any seconds that were part of a non-working day
-function working_time_diff($now, $then)
+function working_time_diff(int $now, int $then) : int
 {
   global $working_days;
 
@@ -2259,8 +2369,8 @@ function working_time_diff($now, $then)
   // (b) the number of non-working days in the part week
 
   // First let's calculate (a)
-  $last = mktime(12, 0, 0, date('n', $last), date('j', $last), date('Y', $last));
-  $first = mktime(12, 0, 0, date('n', $first), date('j', $first), date('Y', $first));
+  $last = mktime(12, 0, 0, (int)date('n', $last), (int)date('j', $last), (int)date('Y', $last));
+  $first = mktime(12, 0, 0, (int)date('n', $first), (int)date('j', $first), (int)date('Y', $first));
   $days_diff = (int) round(($last - $first)/SECONDS_PER_DAY);  // the difference in days
   $whole_weeks = (int) floor($days_diff/DAYS_PER_WEEK);  // the number of whole weeks between the two
   $non_working_days = $whole_weeks * (DAYS_PER_WEEK - $n_working_days);
@@ -2292,7 +2402,7 @@ function working_time_diff($now, $then)
 
 
 // checks whether a given day of the week is supposed to be hidden in the display
-function is_hidden_day($dow)
+function is_hidden_day(int $dow) : bool
 {
   global $hidden_days;
 
@@ -2300,8 +2410,9 @@ function is_hidden_day($dow)
 }
 
 
-// checks whether a given day of the week is a weekend day
-function is_weekend($dow)
+// Checks whether a given day of the week is a weekend day.
+// $dow is in the range [0..6].
+function is_weekend(int $dow) : bool
 {
   global $weekdays;
 
@@ -2311,7 +2422,7 @@ function is_weekend($dow)
 
 // returns true if event should be considered private based on
 // config settings and event's privacy status (passed to function)
-function is_private_event($privacy_status)
+function is_private_event(bool $privacy_status) : bool
 {
   global $private_override;
   if ($private_override == "private" )
@@ -2332,7 +2443,7 @@ function is_private_event($privacy_status)
 // where uniqid is time based and is generated by uniqid() and the
 // MD5hash is the first 8 characters of the MD5 hash of $str concatenated
 // with a random number.
-function generate_global_uid($str)
+function generate_global_uid(string $str) : string
 {
   global $server;
 
@@ -2360,7 +2471,7 @@ function generate_global_uid($str)
 // Tests whether an array is associative
 //
 // Thanks to magentix at gmail dot com at http://php.net/manual/function.is-array.php
-function is_assoc($arr)
+function is_assoc(array $arr) : bool
 {
   return (is_array($arr) && count(array_filter(array_keys($arr),'is_string')) == count($arr));
 }
@@ -2370,7 +2481,7 @@ function is_assoc($arr)
 //
 // Based on code from mniewerth at ultimediaos dot com at
 // http://php.net/manual/features.commandline.php
-function is_cgi()
+function is_cgi() : bool
 {
   return (substr(PHP_SAPI, 0, 3) == 'cgi');
 }
@@ -2380,7 +2491,7 @@ function is_cgi()
 //
 // Based on code from mniewerth at ultimediaos dot com at
 // http://php.net/manual/features.commandline.php
-function is_cli()
+function is_cli() : bool
 {
   global $allow_cli;
 
@@ -2403,6 +2514,14 @@ function is_cli()
   }
 }
 
+
+// Determines whether we are in kiosk mode
+function is_kiosk_mode() : bool
+{
+  return session()->isset('kiosk_password_hash');
+}
+
+
 // Set and restore ignore_user_abort.   The function is designed to be used to
 // ensure a critical piece of code can't be aborted, and used in pairs of set and
 // restore calls.  The function keeps track of outstanding set requests so that
@@ -2410,14 +2529,14 @@ function is_cli()
 //
 // $set   TRUE    set ignore_user_abort
 //        FALSE   restore to the original state, if no other requests outstanding
-function mrbs_ignore_user_abort($set)
+function mrbs_ignore_user_abort(bool $set) : void
 {
   static $original_state;
   static $outstanding_requests = 0;
 
   if (!isset($original_state))
   {
-    $original_state = ignore_user_abort();
+    $original_state = boolval(ignore_user_abort());
   }
 
   // Set ignore_user_abort
@@ -2425,7 +2544,7 @@ function mrbs_ignore_user_abort($set)
   {
     if ($outstanding_requests == 0)
     {
-      ignore_user_abort(1);
+      ignore_user_abort(true);
     }
     $outstanding_requests++;
   }
@@ -2442,28 +2561,27 @@ function mrbs_ignore_user_abort($set)
 
 
 // Gets the web server software type and version, if it can.
-function get_server_software()
+function get_server_software() : string
 {
   global $server;
 
   if (function_exists('apache_get_version'))
   {
-    return apache_get_version();
+    $result = apache_get_version();
+    if ($result !== false)
+    {
+      return $result;
+    }
   }
 
-  if (isset($server['SERVER_SOFTWARE']))
-  {
-    return $server['SERVER_SOFTWARE'];
-  }
-
-  return '';
+  return $server['SERVER_SOFTWARE'] ?? '';
 }
 
 
 
-function get_field_entry_input($params)
+function get_field_entry_input(array $params) : Field
 {
-  global $select_options, $datalist_options;
+  global $select_options, $datalist_options, $text_input_max;
 
   if (isset($params['field']))
   {
@@ -2475,13 +2593,21 @@ function get_field_entry_input($params)
     {
       $class = 'FieldInputDatalist';
     }
-    elseif ($params['field'] == 'entry.description')
-    {
-      $class = 'FieldTextarea';
-    }
     else
     {
-      $class = 'FieldInputText';
+      $columns = Columns::getInstance(_tbl('entry'));
+      $column_name = preg_replace('/^entry./', '', $params['field']);
+      $column = $columns->getColumnByName($column_name);
+      if (!in_array($column_name, ['name', 'create_by']) &&  // special cases
+          ($column->getNature() === Column::NATURE_CHARACTER) &&
+          ($column->getLength() > $text_input_max))
+      {
+        $class = 'FieldTextarea';
+      }
+      else
+      {
+        $class = 'FieldInputText';
+      }
     }
   }
   else
@@ -2527,7 +2653,7 @@ function get_field_entry_input($params)
     case 'FieldTextarea':
       if ($class == 'FieldTextarea')
       {
-        $field->setControlText($params['value']);
+        $field->setControlText($params['value'] ?? '');
       }
       else
       {
@@ -2537,6 +2663,13 @@ function get_field_entry_input($params)
         (null !== ($maxlength = maxlength($params['field']))))
       {
         $field->setControlAttribute('maxlength', $maxlength);
+      }
+      // Add a placeholder if necessary
+      $tag = $params['field'] . '.placeholder';
+      $placeholder = get_vocab($tag);
+      if (isset($placeholder) && ($placeholder !== $tag))
+      {
+        $field->setControlAttribute('placeholder', $placeholder);
       }
       break;
 
@@ -2558,7 +2691,7 @@ function get_field_entry_input($params)
 //    field       the field name, eg 'entry.create_by'
 //    label       the field label
 //    name        the field name
-function get_user_field(array $params, $datalist=false)
+function get_user_field(array $params, bool $datalist=false)
 {
   if (method_exists(auth(), 'getUsernames'))
   {

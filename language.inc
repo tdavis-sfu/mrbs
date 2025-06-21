@@ -1,8 +1,15 @@
 <?php
+declare(strict_types=1);
 namespace MRBS;
 
-// Note that we are using \MRBS\Locale because \Locale has some bugs in it (and also
+// Note that we are using MRBS\Intl\Locale because \Locale has some bugs in it (and also
 // isn't always installed).
+
+use IntlDateFormatter;
+use MRBS\Intl\IntlDateFormatterFactory;
+use MRBS\Intl\IntlDatePatternGenerator;
+use MRBS\Intl\Locale;
+use PHPMailer\PHPMailer\PHPMailer;
 
 require_once "functions.inc";
 
@@ -16,106 +23,23 @@ $lang_aliases = array
 
 // Map non-standard language codes used by flatpickr onto BCP 47 language tags
 $flatpickr_lang_map = array(
-  'at'     => 'de-at',
-  'cat'    => 'ca',
-  'gr'     => 'el',
-  'kz'     => 'kk',
-  'sr-cyr' => 'sr-cyrl',
-  'vn'     => 'vi'
+  'at'      => 'de-at',
+  'cat'     => 'ca',
+  'ckb'     => 'ku',
+  'gr'      => 'el',
+  'kz'      => 'kk',
+  'sr-cyr'  => 'sr-cyrl',
+  'uz-latn' => 'uz-latn-uz',
+  'vn'      => 'vi'
 );
 
 // Map flatpickr language file names onto flatpickr fp.l10ns properties
 // so that they can be used with flatpickr.localize.
 $flatpickr_property_map = array(
-  'sr-cyr' => 'sr',
-  'zh-tw'  => 'zh_tw'
+  'ar-dz'   => 'arDz',
+  'sr-cyr'  => 'srCyr',
+  'zh-tw'   => 'zh_tw'
 );
-
-// The DataTables language files are for the moment given descriptive names.   I have
-// asked the DataTables team to use BCP 47 tags instead, but until that happens we have
-// to map the descriptions onto tags.  (The other method would be to rename all the files,
-// but then it would be less easy to take new releases of DataTables).
-$datatables_lang_map = array(
-  'Afrikaans'           => 'af',
-  'Albanian'            => 'sq',
-  'Amharic'             => 'am',
-  'Arabic'              => 'ar',
-  'Armenian'            => 'hy',
-  'Azerbaijan'          => 'az',
-  'Bangla'              => 'bn',
-  'Basque'              => 'eu',
-  'Belarusian'          => 'be',
-  'Bulgarian'           => 'bg',
-  'Catalan'             => 'ca',
-  'Chinese-traditional' => 'zh-tw',
-  'Chinese'             => 'zh',
-  'Croatian'            => 'hr',
-  'Czech'               => 'cs',
-  'Danish'              => 'da',
-  'Dutch'               => 'nl',
-  'English'             => 'en',
-  'Esperanto'           => 'eo',
-  'Estonian'            => 'et',
-  'Filipino'            => 'fil',
-  'Finnish'             => 'fi',
-  'French'              => 'fr',
-  'Galician'            => 'gl',
-  'Georgian'            => 'ka',
-  'German'              => 'de',
-  'Greek'               => 'el',
-  'Gujarati'            => 'gu',
-  'Hebrew'              => 'he',
-  'Hindi'               => 'hi',
-  'Hungarian'           => 'hu',
-  'Icelandic'           => 'is',
-  'Indonesian'          => 'id',
-  'Irish'               => 'ga',
-  'Italian'             => 'it',
-  'Japanese'            => 'ja',
-  'Kannada'             => 'kn',
-  'Kazakh'              => 'kk',
-  'Khmer'               => 'km',
-  'Korean'              => 'ko',
-  'Kurdish'             => 'ku',
-  'Kyrgyz'              => 'ky',
-  'Lao'                 => 'lo',
-  'Latvian'             => 'lv',
-  'Lithuanian'          => 'lt',
-  'Macedonian'          => 'mk',
-  'Malay'               => 'ms',
-  'Mongolian'           => 'mn',
-  'Nepali'              => 'ne',
-  'Norwegian-Bokmal'    => 'nb',
-  'Norwegian-Nynorsk'   => 'nn',
-  'Pashto'              => 'ps',
-  'Persian'             => 'fa',
-  'Polish'              => 'pl',
-  'Portuguese-Brasil'   => 'pt-br',
-  'Portuguese'          => 'pt',
-  'Punjabi'             => 'pa',
-  'Romanian'            => 'ro',
-  'Rumantsch'           => 'rm',
-  'Russian'             => 'ru',
-  'Serbian'             => 'sr',
-  'Serbian_latin'       => 'sr-latn',
-  'Sinhala'             => 'si',
-  'Slovak'              => 'sk',
-  'Slovenian'           => 'sl',
-  'Spanish'             => 'es',
-  'Swahili'             => 'sw',
-  'Swedish'             => 'sv',
-  'Tajik'               => 'tg',
-  'Tamil'               => 'ta',
-  'telugu'              => 'te',
-  'Thai'                => 'th',
-  'Turkish'             => 'tr',
-  'Ukrainian'           => 'uk',
-  'Urdu'                => 'ur',
-  'Uzbek'               => 'uz',
-  'Vietnamese'          => 'vi',
-  'Welsh'               => 'cy'
-);
-
 
 // A list of languages that use Right to Left text
 $rtl_languages = array(
@@ -163,7 +87,9 @@ if (!empty($override_locale))
 // trying to find a locale that is available on the server and has a translation available
 // in MRBS and has localisations available in all the third party libraries.
 
-language_debug('HTTP_ACCEPT_LANGUAGE: ' . $server['HTTP_ACCEPT_LANGUAGE']);
+$http_accept_language = $server['HTTP_ACCEPT_LANGUAGE'] ?? '';
+language_debug("HTTP_ACCEPT_LANGUAGE: $http_accept_language");
+
 // Translate languages in the header string to their aliases
 if (isset($server['HTTP_ACCEPT_LANGUAGE']))
 {
@@ -207,7 +133,7 @@ set_vocab($lang);
 
 
 // Determines whether we are using a RTL language
-function using_rtl_lang()
+function using_rtl_lang() : bool
 {
   global $rtl_languages;
 
@@ -217,7 +143,7 @@ function using_rtl_lang()
 
 
 // Converts a locale to standard BCP 47 format
-function convert_to_BCP47($locale)
+function convert_to_BCP47(?string $locale) : ?string
 {
   if (!isset($locale))
   {
@@ -225,7 +151,7 @@ function convert_to_BCP47($locale)
   }
 
   // Parse it and then recompose it.  This will get the capitalisation correct, eg
-  // "sr-Latn-RS".  Note though that BCP 47 language tags are case insensitive and
+  // "sr-Latn-RS".  Note though that BCP 47 language tags are case-insensitive and
   // the capitalisation is just a convention.
   $locale = Locale::composeLocale(Locale::parseLocale($locale));
   // Replace the underscores with hyphens.  The PHP Locale class will return underscores,
@@ -247,10 +173,12 @@ function set_mrbs_locale($locale)
   {
     // $os_locale will be an array
     $message = "Server failed to set locale to " . json_encode($os_locale) .
-               " for language tag '$locale'.";
+               " for language tag '$locale'.  Either install the missing locale" .
+               ' or set $override_locale in your MRBS config.inc.php file to a' .
+               ' locale that is available on your server.';
     trigger_error($message, E_USER_NOTICE);
 
-    if (false === setlocale(LC_ALL, 'C'))
+    if (false === setlocale(LC_ALL, array('C.UTF-8', 'C.utf-8', 'C.utf8', 'C')))
     {
       fatal_error("Could not set locale at all, not even to 'C'");
     }
@@ -262,7 +190,7 @@ function set_mrbs_locale($locale)
 // Note: the first time this function is called, it should be called with a $header string.
 // Subsequent calls will just return the static $locale variable which was calculated on
 // the first call
-function get_mrbs_locale($header=null)
+function get_mrbs_locale($header=null) : string
 {
   global $override_locale, $disable_automatic_language_changing, $default_language_tokens;
   global $cli_language;
@@ -272,15 +200,16 @@ function get_mrbs_locale($header=null)
 
   if (!$have_locale)
   {
-    // If we're running from the CLI, use the config setting
-    if (!empty($cli_language) && is_cli())
-    {
-      $locale = $cli_language;
-    }
-    // Otherwise use the override locale if we've been given one
-    elseif (!empty($override_locale))
+
+    // Use the override locale if we've been given one
+    if (!empty($override_locale))
     {
       $locale = $override_locale;
+    }
+    // Otherwise, if we're running from the CLI, use the config setting
+    elseif (!empty($cli_language) && is_cli())
+    {
+      $locale = $cli_language;
     }
     // Otherwise, if we've been told to use a fixed language, then use that
     elseif ($disable_automatic_language_changing &&
@@ -294,14 +223,16 @@ function get_mrbs_locale($header=null)
     {
       $locale = Locale::acceptFromHttp($header);
     }
-    // If there aren't any browser preferences, use English
-    else
+
+    // If everything fails, use English
+    if (!isset($locale))
     {
       $locale = 'en';
     }
 
     // Convert it to BCP 47 format (eg convert 'en_US' to 'en-US')
     $locale = convert_to_BCP47($locale);
+    $have_locale = true;
   }
 
   return $locale;
@@ -313,7 +244,7 @@ function get_mrbs_locale($header=null)
 // locale used by MRBS, and given by get_mrbs_locale(), may not be available.  So this function
 // returns as wide a list of languages as possible, in the hope that one of them may be
 // supported by the third party library.
-function get_lang_preferences()
+function get_lang_preferences() : array
 {
   global $cli_language, $disable_automatic_language_changing, $default_language_tokens;
   global $override_locale;
@@ -366,7 +297,7 @@ function get_lang_preferences()
 // Note: the first time this function is called, it should be called with a $locale.
 // Subsequent calls will just return the static $lang variable which was calculated on
 // the first call
-function get_mrbs_lang($locale=null)
+function get_mrbs_lang(?string $locale=null)
 {
   global $disable_automatic_language_changing,
          $default_language_tokens,
@@ -402,7 +333,7 @@ function get_mrbs_lang($locale=null)
 
 // Returns a version of the Accept-Language request HTTP header with language
 // strings substituted for their aliases
-function alias_header($header, array $aliases)
+function alias_header(string $header, array $aliases) : string
 {
   if (!empty($aliases))
   {
@@ -426,7 +357,7 @@ function alias_header($header, array $aliases)
 // by language, given an Accept-Language header string.
 // If $translate_wildcard is set then the wildcard language identifier ('*') is
 // translated to a standard language - we use 'en'.
-function get_qualifiers($header, $translate_wildcard=false)
+function get_qualifiers(?string $header, bool $translate_wildcard=false) : array
 {
   $result = array();
 
@@ -482,7 +413,7 @@ function get_qualifiers($header, $translate_wildcard=false)
 // Returns a string of acceptable languages, sorted in decreasing order of preference
 // If $translate_wildcard is set then the wildcard language identifier ('*') is
 // translated to a standard language - we use 'en'.
-function get_browser_langs($header, $translate_wildcard=false)
+function get_browser_langs(?string $header, bool $translate_wildcard=false) : array
 {
   return array_keys(get_qualifiers($header, $translate_wildcard));
 }
@@ -490,7 +421,7 @@ function get_browser_langs($header, $translate_wildcard=false)
 
 // Gets all the language tags in a directory where the filenames are of the format
 // $prefix . $lang . $suffix.  Returns an array.
-function get_langtags($dir, $prefix='', $suffix='')
+function get_langtags(string $dir, string $prefix='', string $suffix='') : array
 {
   $result = array();
 
@@ -536,10 +467,8 @@ function get_langtags($dir, $prefix='', $suffix='')
 //
 // The file names are assumed to be of the form $prefix . $lang . $suffix, eg
 // 'datepicker-en-GB.js'
-function get_best_lang_file($dir, $prefix='', $suffix='', array $default_langtags=null, array $lang_map=null)
+function get_best_lang_file(string $dir, string $prefix='', string $suffix='', ?array $default_langtags=null, ?array $lang_map=null) : ?string
 {
-  global $default_language_tokens;
-
   if (!is_dir($dir))
   {
     trigger_error("MRBS: directory $dir does not exist", E_USER_NOTICE);
@@ -599,7 +528,7 @@ function get_best_lang_file($dir, $prefix='', $suffix='', array $default_langtag
 
 // Returns the pathname of the language file to use for the flatpickr
 // datepicker.    If no suitable language file exists then returns NULL.
-function get_flatpickr_lang_path()
+function get_flatpickr_lang_path() : ?string
 {
   global $flatpickr_lang_map;
 
@@ -632,17 +561,15 @@ function get_flatpickr_property($lang_file)
 
 // Returns the pathname of the language file to use for the dataTables
 // jQuery plugin.    If no suitable language file exists then returns NULL.
-function get_datatable_lang_path()
+function get_datatable_lang_path() : ?string
 {
-  global $datatables_lang_map;
-
   static $have_result = false;
   static $result = null;
 
   if (!$have_result)
   {
     $dir = 'jquery/datatables/language';
-    $file = get_best_lang_file(__DIR__ . "/$dir", '', '.lang', null, $datatables_lang_map);
+    $file = get_best_lang_file(__DIR__ . "/$dir", '', '.json');
     $result = (isset($file)) ? "$dir/$file" : null;
     $have_result = true;
   }
@@ -724,34 +651,28 @@ function set_vocab($lang)
 }
 
 
-function get_charset()
+function get_charset() : string
 {
   return 'utf-8';
 }
 
 
-function get_mail_charset()
+function get_mail_charset() : string
 {
-  return 'utf-8';
+  return PHPMailer::CHARSET_UTF8;
 }
 
 
-function get_csv_charset()
+function get_csv_charset() : string
 {
   global $csv_charset;
-  if (empty($csv_charset))
-  {
-    return get_charset();
-  }
-  else
-  {
-    return $csv_charset;
-  }
+
+  return (empty($csv_charset)) ? get_charset() : $csv_charset;
 }
 
 
 // Returns the language that MRBS is using, in BCP-47 format
-function get_lang()
+function get_lang() : string
 {
   global $lang;
 
@@ -759,7 +680,7 @@ function get_lang()
 }
 
 
-function get_bom($charset)
+function get_bom(string $charset) : string
 {
   switch(utf8_strtolower($charset))
   {
@@ -782,7 +703,7 @@ function get_bom($charset)
 // [Maybe in the future we should switch to using the MessageFormatter
 //  class as it is more powerful.   However the Intl extension isn't present
 //  in all PHP installations and so the class would have to be emulated]
-function get_vocab($tag)
+function get_vocab(string $tag, ...$values) : string
 {
   global $vocab;
 
@@ -792,24 +713,45 @@ function get_vocab($tag)
     return $tag;
   }
 
-  $args = func_get_args();
-  $args[0] = $vocab[$tag];
+  return (count($values) === 0) ? $vocab[$tag] : sprintf($vocab[$tag], ...$values);
+}
 
-  return call_user_func_array('sprintf', $args);
+
+function get_mail_lang() : ?string
+{
+  global $mail_settings, $default_language_tokens;
+
+  static $mail_lang;
+
+  if (!isset($mail_lang))
+  {
+    $available_languages = get_langtags(MRBS_ROOT . '/lang', 'lang.');
+    $mail_lang = Locale::lookup($available_languages, $mail_settings['admin_lang'], false, $default_language_tokens ?? 'en');
+  }
+
+  return $mail_lang;
+}
+
+
+// Same as get_vocab(), but escapes the result for use in JavaScript
+function get_js_vocab(string $tag, ...$values) : string
+{
+  return escape_js(get_vocab($tag, ...$values));
 }
 
 
 // Same as get_vocab(), but uses the mailing language
-function get_mail_vocab($tag)
+function get_mail_vocab(string $tag, ...$values) : string
 {
-  global $vocab, $mail_settings;
+  global $vocab;
 
   static $mail_vocab = null;
 
   if (!isset($mail_vocab))
   {
     $web_vocab = $vocab;   // Save $vocab before it gets overwritten
-    set_vocab($mail_settings['admin_lang']);
+    // Get the best language available for mail
+    set_vocab(get_mail_lang());
     $mail_vocab = $vocab;
     $vocab = $web_vocab;  // Restore $vocab
   }
@@ -820,16 +762,14 @@ function get_mail_vocab($tag)
     return $tag;
   }
 
-  $args = func_get_args();
-  $args[0] = $mail_vocab[$tag];
-  $result = call_user_func_array('sprintf', $args);
+  $result = (count($values) === 0) ? $mail_vocab[$tag] : sprintf($mail_vocab[$tag], ...$values);
 
   return str_replace('&nbsp;', ' ', $result);
 }
 
 
 // Get localised booking type name
-function get_type_vocab($type)
+function get_type_vocab(string $type) : string
 {
   return get_vocab("type.$type");
 }
@@ -839,100 +779,115 @@ function get_type_vocab($type)
 // Looks for a tag of the format tablename.columnname (where tablename is
 // stripped of the table prefix) and if can't find a string for that tag will
 // return the column name
-function get_loc_field_name($table, $name)
+function get_loc_field_name(string $table, string $name) : string
 {
   global $vocab;
 
-  // Get the qualified prefix
-  $full_prefix = _tbl('');
-  // Strip the prefix, if any, off the table name
-  if (utf8_strpos($table, $full_prefix) === 0)
-  {
-    $tag = utf8_substr($table, utf8_strlen($full_prefix));
-  }
-  else
-  {
-    $tag = $table;
-  }
-  // Add on the field name
-  $tag .= "." . $name;
+  $tag = get_table_short_name($table) . ".$name";
 
-  // Then if there's a string in the vocab array for $tag use that,
+  // If there's a string in the vocab array for $tag use that,
   // otherwise just use the fieldname
   return (isset($vocab[$tag])) ? get_vocab($tag) : $name;
 }
 
 
-// optionally switch to a new locale, switching back at the end.
-// $temp_locale can either be a string or an array of locales.
-function utf8_strftime($format, $time, $temp_locale=null)
+function datetime_format(array $format, ?int $timestamp=null, ?string $locale=null) : string
 {
-  $server_os = System::getServerOS();
+  global $icu_override, $timezone;
 
-  // Set the temporary locale.  Note that $temp_locale could be an array of locales,
-  // so we need to find out which locale actually worked.
-  if (!empty($temp_locale))
+  if (!isset($timestamp))
   {
-    $old_locale = setlocale(LC_TIME, '0');
-    $new_locale = setlocale(LC_TIME, $temp_locale);
+    $timestamp = time();
   }
-  elseif ($server_os == "windows")
+
+  if (!isset($locale))
   {
-    // If we are running Windows we have to set the locale again in case another script
-    // running in the same process has changed the locale since we first set it.  See the
-    // warning on the PHP manual page for setlocale():
-    //
-    // "The locale information is maintained per process, not per thread. If you are
-    // running PHP on a multithreaded server API like IIS or Apache on Windows, you may
-    // experience sudden changes in locale settings while a script is running, though
-    // the script itself never called setlocale(). This happens due to other scripts
-    // running in different threads of the same process at the same time, changing the
-    // process-wide locale using setlocale()."
-    $new_locale = get_mrbs_locale();
-    set_mrbs_locale($new_locale);
+    $locale = get_mrbs_locale();
   }
+
+  if (isset($format['skeleton']))
+  {
+    $pattern_generator = new IntlDatePatternGenerator($locale);
+    $pattern = $pattern_generator->getBestPattern($format['skeleton']);
+  }
+
+  if (!isset($pattern) || ($pattern === false) || ($pattern === ''))
+  {
+    $pattern = $format['pattern'] ?? null;
+  }
+
+  $formatter = IntlDateFormatterFactory::create(
+    $locale,
+    $format['date_type'] ?? IntlDateFormatter::FULL,
+    $format['time_type'] ?? IntlDateFormatter::FULL,
+    null, null, $pattern
+  );
+
+  // If we're overriding the ICU value(s) then use those, provided that we're able to make use
+  // of them with the IntlCalendar and (standard, not emulated - hence the check for the loaded
+  // extension, rather than whether the class exists, which it always will) IntlDateFormatter classes.
+  if (isset($icu_override[$locale]) && extension_loaded('intl') && class_exists('IntlCalendar'))
+  {
+    $cal = \IntlCalendar::createInstance($timezone, $locale);
+    {
+      if (isset($icu_override[$locale]['first_day_of_week']))
+      {
+        $cal->setFirstDayOfWeek($icu_override[$locale]['first_day_of_week']);
+      }
+      if (isset($icu_override[$locale]['minimal_days_in_first_week']))
+      {
+        $cal->setMinimalDaysInFirstWeek($icu_override[$locale]['minimal_days_in_first_week']);
+      }
+    }
+    $cal->setTime($timestamp * 1000);
+    return $formatter->format($cal);
+  }
+
+  return $formatter->format($timestamp);
+}
+
+
+// Determines whether a locale (default the current locale) uses a 12-hour clock.
+// Returns NULL if it can't be determined.
+function is_ampm(?string $locale=null) : ?bool
+{
+  global $datetime_formats;
+
+  if (!isset($locale))
+  {
+    $locale = get_mrbs_locale();
+  }
+
+  // Work out what pattern is being used for times.
+  // If an explicit pattern has been set in the config file then use that.
+  if (isset($datetime_formats['time']['pattern']))
+  {
+    $pattern = $datetime_formats['time']['pattern'];
+  }
+  // Otherwise get the pattern that would be used by default.
   else
   {
-    $new_locale = null;
-  }
-
-  if ($server_os == "windows")
-  {
-    // Some formats not supported on Windows.   Replace with suitable alternatives
-    $format = str_replace("%R", "%H:%M", $format);
-    $format = str_replace("%P", "%p", $format);
-    $format = str_replace("%l", "%I", $format);
-    $format = str_replace("%e", "%#d", $format);
-  }
-
-  // %p doesn't actually work in some locales, we have to patch it up ourselves
-  if (preg_match('/%p/', $format))
-  {
-    $ampm = strftime('%p', $time);  // Don't replace the %p with the $strftime_format variable!!
-    if ($ampm == '')
+    $formatter = IntlDateFormatterFactory::create(
+      $locale,
+      $format['date_type'] ?? IntlDateFormatter::NONE,
+      $format['time_type'] ?? IntlDateFormatter::SHORT
+    );
+    $pattern = $formatter->getPattern();
+    if ($pattern === false)
     {
-      $ampm = date('a', $time);
+      trigger_error("Could not determine whether '$locale' uses a 12-hour clock");
+      return null;
     }
-
-    $format = preg_replace('/%p/', $ampm, $format);
   }
 
-  $result = strftime($format, $time);
-  $result = System::utf8ConvertFromLocale($result, $new_locale);
-
-  // Restore the original locale
-  if (!empty($temp_locale))
-  {
-    setlocale(LC_TIME, $old_locale);
-  }
-
-  return $result;
+  // And see if it contains an 'a'
+  return str_contains($pattern, 'a');
 }
 
 
 // UTF-8 compatible substr function obtained from a contribution by
 // "frank at jkelloggs dot dk" in the PHP online manual for substr()
-function utf8_substr_old($str, $start, $length=null)
+function utf8_substr_old(string $str, int $start, ?int $length=null) : string
 {
   preg_match_all("/./su", $str, $ar);
 
@@ -941,38 +896,36 @@ function utf8_substr_old($str, $start, $length=null)
 
 
 // UTF-8 compatible substr function
-function utf8_substr($str, $start, $length=null)
+function utf8_substr(string $str, int $start, ?int $length=null) : string
 {
+  // If we have mb_substr, use it - it's much quicker than our routines, as it's native code.
+  // Note that we need to check for both 'mb_substr' and 'mb_detect_encoding' in case
+  // we are working with WordPress, which has a compatibility library that includes
+  // mb_substr() but not mb_detect_encoding().
+  if (function_exists('mb_substr') && function_exists('mb_detect_encoding'))
+  {
+    $encoding = mb_detect_encoding($str);
+    return mb_substr($str, $start, $length, $encoding);
+  }
+
+  // Otherwise do it ourselves
   if (!isset($length))
   {
     // We cannot set $length to PHP_INT_MAX because there is a bug (#42101)
-    // in mb_substr() when using PHP_INT_MAX on 64 bit Linux systems.  See
-    // https://bugs.php.net/bug.php?id=42101.    Note also that passing NULL
+    // in mb_substr() when using PHP_INT_MAX on 64-bit Linux systems.  See
+    // https://bugs.php.net/bug.php?id=42101.  Note also that passing NULL
     // for the length in mb_substr() causes mb_substr to use a length of 0.
     // See the user contributed notes on the PHP mb_substr() manual page.
     $length = utf8_strlen($str);
   }
 
-  if (function_exists('mb_substr'))
-  {
-    // If we have mb_substr, use it - it's much quicker than our
-    // routines, as it's native code
-
-    $encoding = mb_detect_encoding($str);
-
-    return mb_substr($str, $start, $length, $encoding);
-  }
-
   if (strlen($str) > 1000)
   {
     // If the string is long, the old routine is quicker. :(
-
     return utf8_substr_old($str, $start, $length);
   }
 
-  // Deal with the trivial cases first, which won't be dealt with properly otherwise
-  // below, due to the dummy string we have to use to convince PHP to treat the result as
-  // a string rather than an array.
+  // Deal with the trivial cases first
   if (($str === '') || ($length === 0))
   {
     return '';
@@ -1002,7 +955,7 @@ function utf8_substr($str, $start, $length=null)
       $j++;
     }
     $j = 0;
-    $ret = '.';  // Dummy to fool PHP. If we us an empty string it thinks it's an array.
+    $ret = '';
     for ($i = $index;
          isset($str[$i]) && (ord($str[$i]) != 0) && (!isset($end_index) || ($i < $end_index));
          $i++)
@@ -1013,7 +966,7 @@ function utf8_substr($str, $start, $length=null)
   else
   {
     $j = 0;
-    $ret = '.';  // Dummy to fool PHP. If we us an empty string it thinks it's an array.
+    $ret = '';
     for ($i = $index; isset($str[$i]) && (ord($str[$i]) != 0); $i++)
     {
       $ret[$j++] = $str[$i];
@@ -1026,7 +979,7 @@ function utf8_substr($str, $start, $length=null)
 
 // Takes a string (which may be UTF-8) and returns how long it is in
 // _bytes_
-function utf8_bytecount($str)
+function utf8_bytecount(string $str) : int
 {
   // We cannot rely on strlen() to return the number of bytes because it might
   // have been overloaded by mb_strlen() which returns characters
@@ -1042,25 +995,28 @@ function utf8_bytecount($str)
 
 
 // Takes a UTF-8 string and returns the string with one Unicode character
-// removed from the front
-function utf8_next($str)
+// removed from the front. Returns FALSE if the original string is empty.
+function utf8_next(string $str)
 {
-  $ret = null;
-
-  if (isset($str))
+  if ($str === '')
   {
-    $index = utf8_next_index($str, 0);
+    return false;
+  }
 
-    if ($index)
+  $ret = '';
+  $index = utf8_next_index($str, 0);
+
+  if ($index)
+  {
+    $i = 0;
+    while (isset($str[$index]) && (ord($str[$index]) != 0))
     {
-      $i = 0;
-      $ret = '.';  // Dummy to fool PHP. If we us an empty string it thinks it's an array.
-      while (isset($str[$index]) && ord($str[$index]) != 0)
-      {
-        $ret[$i++] = $str[$index++];
-      }
+      $ret[$i] = $str[$index];
+      $i++;
+      $index++;
     }
   }
+
   return $ret;
 }
 
@@ -1068,13 +1024,13 @@ function utf8_next($str)
 // Takes a UTF-8 string and a byte index into that string, and
 // returns the byte index of the next UTF-8 sequence. When the end
 // of the string is encountered, the function returns NULL
-function utf8_next_index($str, $start)
+function utf8_next_index(string $str, int $start) : ?int
 {
   $ret = null;
 
   $i = $start;
 
-  if (isset($str) && isset($str[$i]))
+  if (isset($str[$i]))
   {
     if (ord($str[$i]) < 0xc0)
     {
@@ -1093,6 +1049,7 @@ function utf8_next_index($str, $start)
       $ret = $i;
     }
   }
+
   return $ret;
 }
 
@@ -1100,38 +1057,33 @@ function utf8_next_index($str, $start)
 // Given a UTF-8 string and a byte index, return the UTF-8 sequence
 // at this index as a string, and update the byte index to point to
 // the next sequence. When the end of the string is encountered, the
-// last sequence is returned, and the byte index set to NULL
-function utf8_seq($str, &$byte_index)
+// last sequence is returned, and the byte index set to NULL.
+// Returns FALSE if the original string is empty.
+function utf8_seq(string $str, int &$byte_index)
 {
-  $ret = '.';  // Dummy to fool PHP. If we us an empty string it thinks it's an array.
+  if ($str === '')
+  {
+    $byte_index = null;
+    return false;
+  }
 
+  $ret = '';
   $next = utf8_next_index($str, $byte_index);
+  $j = 0;
 
-  if (isset($next))
+  for ($i = $byte_index; isset($next) ? ($i < $next) : isset($str[$i]) && (ord($str[$i]) != 0); $i++)
   {
-    $j = 0;
-    for ($i = $byte_index; $i < $next; $i++)
-    {
-      $ret[$j] = $str[$i];
-      $j++;
-    }
+    $ret[$j] = $str[$i];
+    $j++;
   }
-  else
-  {
-    $j = 0;
-    for ($i = $byte_index; isset($str[$i]) && (ord($str[$i]) != 0); $i++)
-    {
-      $ret[$j] = $str[$i];
-      $j++;
-    }
-  }
+
   $byte_index = $next;
   return $ret;
 }
 
 
 // Takes a UTF-8 string and converts it to UTF-16 without using iconv
-function utf8_to_utf16($string)
+function utf8_to_utf16(string $string) : string
 {
   $ucs2 = array();
   $byte_index = 0;
@@ -1194,25 +1146,28 @@ function utf8_to_utf16($string)
 }
 
 
-// Takes a UTF-8 string, and returns the number of _characters_ in the
-// string
-function utf8_strlen($str)
+// Takes a UTF-8 string, and returns the number of _characters_ in the string
+function utf8_strlen(string $str) : int
 {
-  if (!isset($str) || ($str == ""))
+  // If we have mb_strlen(), use it - it'll be quicker
+  if (function_exists('mb_strlen'))
+  {
+    return mb_strlen($str);
+  }
+
+  // Otherwise do it ourselves
+  if ($str === '')
   {
     return 0;
   }
-  if (function_exists('mb_strlen'))
-  {
-    // If we have mb_strlen(), use it - it'll be quicker
-    return mb_strlen($str);
-  }
+
   $len = 1;
   $next = 0;
   while ($next = utf8_next_index($str, $next))
   {
     $len++;
   }
+
   return $len;
 }
 
@@ -1221,7 +1176,7 @@ function utf8_strlen($str)
 // function overloading is not enabled.
 // The ordinary strtolower() will give unexpected results when the locale is set to
 // Turkish and will not convert the letter 'I'.
-function utf8_strtolower($str)
+function utf8_strtolower(string $str) : string
 {
   if (function_exists('mb_strtolower'))
   {
@@ -1236,7 +1191,7 @@ function utf8_strtolower($str)
 // function overloading is not enabled.
 // The ordinary strtoupper() will give unexpected results when the locale is set to
 // Turkish and will not convert the letter 'i'.
-function utf8_strtoupper($str)
+function utf8_strtoupper(string $str) : string
 {
   if (function_exists('mb_strtoupper'))
   {
@@ -1247,7 +1202,7 @@ function utf8_strtoupper($str)
 
 
 // Wrapper round mb_strpos()
-function utf8_strpos($haystack, $needle, $offset=0)
+function utf8_strpos(string $haystack, string $needle, int $offset=0)
 {
   if (function_exists('mb_strpos'))
   {
@@ -1257,7 +1212,18 @@ function utf8_strpos($haystack, $needle, $offset=0)
 }
 
 
-function language_debug($message)
+// Wrapper round mb_stripos()
+function utf8_stripos(string $haystack, string $needle, int $offset=0)
+{
+  if (function_exists('mb_stripos'))
+  {
+    return mb_stripos($haystack, $needle, $offset);
+  }
+  return stripos($haystack, $needle, $offset);
+}
+
+
+function language_debug(string $message) : void
 {
   global $language_debug;
 

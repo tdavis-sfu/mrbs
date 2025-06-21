@@ -23,14 +23,14 @@ $vocab["outstanding"]        = "Tempahan perlu pengesahan";
 $vocab["bookingsfor"]        = "Tempahan Untuk";
 $vocab["bookingsforpost"]    = ""; // Goes after the date
 $vocab["areas"]              = "Lokasi";
-$vocab["today"]              = "Today";
+$vocab["today"]              = "Hari Ini";
 $vocab["daybefore"]          = "Semalam";
 $vocab["dayafter"]           = "Esok";
 $vocab["gototoday"]          = "Hari Ini";
 $vocab["goto"]               = "Pergi";
-$vocab["nav_day"]            = "Day";
-$vocab["nav_week"]           = "Week";
-$vocab["nav_month"]          = "Month";
+$vocab["nav_day"]            = "Harian";
+$vocab["nav_week"]           = "Mingguan";
+$vocab["nav_month"]          = "Bulanan";
 $vocab["highlight_line"]     = "sorot baris ini";
 $vocab["click_to_reserve"]   = "Click pada cell untuk membuat tempahan.";
 $vocab["timezone"]           = "Zon masa";
@@ -281,6 +281,7 @@ $vocab["warning_last_admin"] = "Amaran!  Ini adalah pentadbir yang terakhir dan 
 // Used in search.php
 $vocab["invalid_search"]     = "Kosong atau carian tidak sah.";
 $vocab["search_results"]     = 'Keputusan carian untuk \'%1$s\' daripada %2$s';
+$vocab["search_results_unlimited"] = "Keputusan carian untuk '%s'";
 $vocab["nothing_found"]      = "Tiada padanan carian dijumpai.";
 $vocab["records"]            = "Rekod ";
 $vocab["through"]            = " melepasi ";
@@ -336,7 +337,7 @@ $vocab["delete_entries"]        = "Padam entri";
 $vocab["delete_entries_warning"] = "AMARAN!  Ini akan memadamkan semua entri padanan " .
                                    "rentetan carian.  Operasi ini tidak dapat diundur.  Adakah " .
                                    "anda yakin anda  meneruskan?\n\n" .
-                                   "Jumlah entri yang akan dibuang: ";
+                                   "Jumlah entri yang akan dibuang: %%s"; // The % sign is escaped because the string substitution is done by JavaScript
 $vocab["delete_entries_failed"] = "Entri ini tidak dapat dipadamkan.";
 
 // Used in admin.php
@@ -361,7 +362,6 @@ $vocab["empty_name"]         = "Anda tidak memasukkan nama!";
 // Used in edit_area.php and/or edit_room.php
 $vocab["editarea"]                = "Edit Kawasan";
 $vocab["change"]                  = "Ubah";
-$vocab["backadmin"]               = "Kembali ke bilik";
 $vocab["editroom"]                = "Ubah bilik";
 $vocab["viewroom"]                = "Iihat bilik";
 $vocab["not_found"]               = "tidak dijumpai";
@@ -457,8 +457,7 @@ $vocab["database"]           = "Pangkalan Data";
 $vocab["system"]             = "Sistem";
 $vocab["servertime"]         = "Masa pelayan";
 $vocab["server_software"]    = "perisian pelayan";
-$vocab["please_contact"]     = "Sila hubungi ";
-$vocab["for_any_questions"]  = "untuk sebarang pertanyaan yang tidak ada disini.";
+$vocab["please_contact"]     = "Sila hubungi %s untuk sebarang pertanyaan yang tidak ada disini.";
 
 // Used in import.php
 $vocab["import_icalendar"]            = "Import an iCalendar file";
@@ -476,7 +475,7 @@ $vocab["import_bzip2"]                = "bzip2 files";
 $vocab["file_name"]                   = "File";
 $vocab["import"]                      = "Import";
 $vocab["upload_failed"]               = "Upload failed";
-$vocab["max_allowed_file_size"]       = "The maximum allowed file size is";
+$vocab["max_allowed_file_size"]       = "The maximum allowed file size is %s bytes";
 $vocab["no_file"]                     = "No file was uploaded";
 $vocab["could_not_process"]           = "Import failed: could not process file";
 $vocab["badly_formed_ics"]            = "Badly formed VCALENDAR file";

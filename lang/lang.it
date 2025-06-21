@@ -323,7 +323,6 @@ $vocab["privacy_status"]        = "Stato privacy";
 $vocab["search_criteria"]       = "Criteri di ricerca";
 $vocab["presentation_options"]  = "Opzioni di presentazione";
 $vocab["delete_entries"]        = "Cancella valori";
-$vocab["delete_entries_warning"] = "ATENZIONE!  Questa operazione cancellerà tutti i valori che soddisfano " .
 $vocab["delete_entries_failed"] = "Non è stato possibile cancellare i valori.";
 
 // Used in admin.php
@@ -348,7 +347,6 @@ $vocab["empty_name"]         = "Non hai inserito un nome!";
 // Used in edit_area.php and/or edit_room.php
 $vocab["editarea"]           = "Modifica area";
 $vocab["change"]             = "Cambia";
-$vocab["backadmin"]          = "Torna all'amministrazione";
 $vocab["editroom"]           = "Modifica stanza";
 $vocab["viewroom"]           = "Vedi stanza";
 $vocab["not_found"]          = " non trovata";
@@ -435,8 +433,7 @@ $vocab["about_mrbs"]         = "Circa MRBS";
 $vocab["database"]           = "Database";
 $vocab["system"]             = "Sistema operativo";
 $vocab["servertime"]         = "Ora del Server";
-$vocab["please_contact"]     = "Contatta ";
-$vocab["for_any_questions"]  = "per qualsiasi altra domanda.";
+$vocab["please_contact"]     = "Contatta %s per qualsiasi altra domanda.";
 
 // Used in import.php
 $vocab["import_icalendar"]            = "Importa un file iCalendar";
@@ -453,7 +450,7 @@ $vocab["import_bzip2"]                = "bzip2 file";
 $vocab["file_name"]                   = "File";
 $vocab["import"]                      = "Importa";
 $vocab["upload_failed"]               = "Invio fallito";
-$vocab["max_allowed_file_size"]       = "La massima dimensione file permessa è";
+$vocab["max_allowed_file_size"]       = "La massima dimensione file permessa è %s";
 $vocab["no_file"]                     = "Nessun file inviato";
 $vocab["could_not_process"]           = "Importazione fallita: non è stato possibile processare il file";
 $vocab["badly_formed_ics"]            = "File VCALENDAR in formato errato";

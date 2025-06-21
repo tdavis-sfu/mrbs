@@ -2,9 +2,11 @@
 namespace MRBS\Auth;
 
 
+use function MRBS\utf8_strtolower;
+
 class AuthConfig extends Auth
 {
-  /* authValidateUser($user, $pass)
+  /* validateUser($user, $pass)
    *
    * Checks if the specified username/password pair are valid
    *
@@ -15,7 +17,11 @@ class AuthConfig extends Auth
    *   false    - The pair are invalid or do not exist
    *   string   - The validated username
    */
-  public function validateUser($user, $pass)
+  public function validateUser(
+    #[\SensitiveParameter]
+    ?string $user,
+    #[\SensitiveParameter]
+    ?string $pass)
   {
     global $auth;
 
@@ -28,8 +34,8 @@ class AuthConfig extends Auth
     if ((isset($auth["user"][$user]) &&
         ($auth["user"][$user] == $pass)
       ) ||
-      (isset($auth["user"][\MRBS\utf8_strtolower($user)]) &&
-        ($auth["user"][\MRBS\utf8_strtolower($user)] == $pass)
+      (isset($auth["user"][utf8_strtolower($user)]) &&
+        ($auth["user"][utf8_strtolower($user)] == $pass)
       ))
     {
       return $user;    // User validated
@@ -40,7 +46,7 @@ class AuthConfig extends Auth
 
 
   // Return an array of users, indexed by 'username' and 'display_name'
-  public function getUsernames()
+  public function getUsernames() : array
   {
     global $auth;
 

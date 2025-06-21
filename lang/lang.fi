@@ -303,7 +303,7 @@ $vocab["delete_entries"]        = "Poista varaukset";
 $vocab["delete_entries_warning"] = "VAROITUS! Olet poistamassa kaikkia hakusanan löytyvät " .
                                    "varaukset. Tämä poistaa varaukset lopullisesti. " .
                                    "Haluatko varmasti jatkaa?\n\n" .
-                                   "Poistettavien merkintöjen määrä: ";
+                                   "Poistettavien merkintöjen määrä: %%s"; // The % sign is escaped because the string substitution is done by JavaScript
 $vocab["delete_entries_failed"] = "Varauksia ei voitu poistaa.";
 
 // Used in admin.php
@@ -328,7 +328,6 @@ $vocab["empty_name"]         = "Nimi puuttuu!";
 // Used in edit_area.php and/or edit_room.php
 $vocab["editarea"]                = "Muokkaa alueen tietoja";
 $vocab["change"]                  = "Tallenna";
-$vocab["backadmin"]               = "Takaisin ylläpitoon";
 $vocab["editroom"]                = "Muokkaa huoneen tietoja";
 $vocab["viewroom"]                = "Näytä huoneen tiedot";
 $vocab["not_found"]               = " ei löytynyt";
@@ -410,8 +409,7 @@ $vocab["about_mrbs"]         = "Tietoja varausjärjestelmästä";
 $vocab["database"]           = "Tietokanta";
 $vocab["system"]             = "Käyttöjärjestelmä";
 $vocab["servertime"]         = "Palvelimen aika";
-$vocab["please_contact"]     = "Järjestelmän yhteyshenkilö ";
-$vocab["for_any_questions"]  = "antaa lisätietoja mikäli et löydä vastausta kysymykseesi näistä ohjeista.";
+$vocab["please_contact"]     = "Järjestelmän yhteyshenkilö %s antaa lisätietoja mikäli et löydä vastausta kysymykseesi näistä ohjeista.";
 
 // Used in import.php
 $vocab["import_icalendar"]            = "Tuo iCalendar-tiedosto";
@@ -424,7 +422,7 @@ $vocab["import_intro"]                = "Tämän lomakkeen avulla voit tuoda RFC
 $vocab["file_name"]                   = "Tiedosto";
 $vocab["import"]                      = "Tuo";
 $vocab["upload_failed"]               = "Tiedoston lähetys epäonnistui";
-$vocab["max_allowed_file_size"]       = "Tiedoston maksimikoko on";
+$vocab["max_allowed_file_size"]       = "Tiedoston maksimikoko on %s";
 $vocab["no_file"]                     = "Ei lähetettyä tiedostoa";
 $vocab["badly_formed_ics"]            = "Tunnistamaton VCALENDAR-tiedoston muoto";
 $vocab["area_room_order"]             = "Järjestys";

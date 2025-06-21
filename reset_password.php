@@ -1,4 +1,5 @@
 <?php
+declare(strict_types=1);
 namespace MRBS;
 
 use MRBS\Form\Element;
@@ -14,15 +15,14 @@ use MRBS\Form\Form;
 require "defaultincludes.inc";
 
 
-function generate_reset_request_form($result=null)
+function generate_reset_request_form(?string $result=null) : void
 {
   $can_reset_by_email = auth()->canResetByEmail();
 
-  $form = new Form();
+  $form = new Form(Form::METHOD_POST);
   $form->setAttributes(array(
       'class'  => 'standard',
       'id'     => 'lost_password',
-      'method' => 'post',
       'action' => multisite('reset_password_handler.php')
     ));
 
@@ -31,7 +31,7 @@ function generate_reset_request_form($result=null)
     ));
 
   $fieldset = new ElementFieldset();
-  $fieldset->addLegend(\MRBS\get_vocab('password_reset'));
+  $fieldset->addLegend(get_vocab('password_reset'));
 
   $field = new FieldDiv();
   if (isset($result) && ($result=='request_failed'))
@@ -49,10 +49,10 @@ function generate_reset_request_form($result=null)
   $fieldset->addElement($field);
 
   $tag = ($can_reset_by_email) ? 'username_or_email' : 'users.name';
-  $placeholder = \MRBS\get_vocab($tag);
+  $placeholder = get_vocab($tag);
 
   $field = new FieldInputText();
-  $field->setLabel(\MRBS\get_vocab('user'))
+  $field->setLabel(get_vocab('user'))
         ->setLabelAttributes(array('title' => $placeholder))
         ->setControlAttributes(array('id'           => 'username',
                                      'name'         => 'username',
@@ -67,7 +67,7 @@ function generate_reset_request_form($result=null)
   // The submit button
   $fieldset = new ElementFieldset();
   $field = new FieldInputSubmit();
-  $field->setControlAttributes(array('value' => \MRBS\get_vocab('get_new_password')));
+  $field->setControlAttributes(array('value' => get_vocab('get_new_password')));
   $fieldset->addElement($field);
 
   $form->addElement($fieldset);
@@ -76,7 +76,7 @@ function generate_reset_request_form($result=null)
 }
 
 
-function generate_reset_form(array $usernames, $key, $error=null)
+function generate_reset_form(array $usernames, ?string $key, ?string $error=null) : bool
 {
   global $pwd_policy;
 
@@ -97,11 +97,10 @@ function generate_reset_form(array $usernames, $key, $error=null)
   }
 
   // Construct the form
-  $form = new Form();
+  $form = new Form(Form::METHOD_POST);
   $form->setAttributes(array(
       'class'  => 'standard',
       'id'     => 'lost_password',
-      'method' => 'post',
       'action' => multisite('reset_password_handler.php')
     ));
 
@@ -111,7 +110,7 @@ function generate_reset_form(array $usernames, $key, $error=null)
     ));
 
   $fieldset = new ElementFieldset();
-  $fieldset->addLegend(\MRBS\get_vocab('password_reset'));
+  $fieldset->addLegend(get_vocab('password_reset'));
 
   $field = new FieldDiv();
   if (isset($error) && ($error=='pwd_not_match'))
@@ -166,7 +165,7 @@ function generate_reset_form(array $usernames, $key, $error=null)
   for ($i=0; $i<2; $i++)
   {
     $field = new FieldInputPassword();
-    $field->setLabel(\MRBS\get_vocab('users.password'))
+    $field->setLabel(get_vocab('users.password'))
           ->setControlAttributes(array('id' => "password$i",
                                        'name' => "password$i",
                                        'autocomplete' => 'new-password'));
@@ -178,7 +177,7 @@ function generate_reset_form(array $usernames, $key, $error=null)
   // The submit button
   $fieldset = new ElementFieldset();
   $field = new FieldInputSubmit();
-  $field->setControlAttributes(array('value' => \MRBS\get_vocab('reset_password')));
+  $field->setControlAttributes(array('value' => get_vocab('reset_password')));
   $fieldset->addElement($field);
 
   $form->addElement($fieldset);
@@ -188,20 +187,20 @@ function generate_reset_form(array $usernames, $key, $error=null)
 }
 
 
-function generate_invalid_link()
+function generate_invalid_link() : void
 {
   echo "<h2>" . get_vocab('invalid_link') . "</h2>\n";
   echo "<p>" . get_vocab('link_invalid') . "</p>\n";
 }
 
 
-function generate_request_sent()
+function generate_request_sent() : void
 {
   echo "<h2>" . get_vocab('password_reset') . "</h2>\n";
   echo "<p>" . get_vocab('pwd_check_email') . "</p>\n";
 }
 
-function generate_reset_success()
+function generate_reset_success() : void
 {
   echo "<h2>" . get_vocab('password_reset') . "</h2>\n";
   echo "<p>" . get_vocab('pwd_reset_success') . "</p>\n";
@@ -224,7 +223,7 @@ $context = array(
     'month'     => $month,
     'day'       => $day,
     'area'      => $area,
-    'room'      => isset($room) ? $room : null
+    'room'      => $room ?? null
   );
 
 print_header($context);

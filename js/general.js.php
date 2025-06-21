@@ -1,16 +1,16 @@
 <?php
+declare(strict_types=1);
 namespace MRBS;
 
 require "../defaultincludes.inc";
 
 http_headers(array("Content-type: application/x-javascript"),
              60*30);  // 30 minute expiry
+?>
 
-if ($use_strict)
-{
-  echo "'use strict';\n";
-}
+'use strict';
 
+<?php
 global $autocomplete_length_breaks;
 
 // Function to determine whether the browser supports the HTML5
@@ -205,18 +205,10 @@ $(document).on('page_ready', function() {
     <?php
   }
 
-  // Add in a hidden input to the header search forms so that we can tell if we are using DataTables
+  // Add in a hidden input to the user list link so that we can tell if we are using DataTables
   // (which will be if JavaScript is enabled).   We need to know this because when we're using an
   // an Ajax data source we don't want to send the HTML version of the table data.
-  //
-  // Also add 'datatable=1' to the link for the user list for the same reason
   ?>
-
-  $('<input>').attr({
-      type: 'hidden',
-      name: 'datatable',
-      value: '1'
-    }).appendTo('form[action="search.php"]');
 
   $('header a[href^="edit_users.php"]').each(function() {
       var href = $(this).attr('href');
@@ -405,7 +397,7 @@ $(document).on('page_ready', function() {
                  e.target.setCustomValidity('');
                  if (!e.target.validity.valid)
                  {
-                   e.target.setCustomValidity('<?php echo escape_js(get_vocab('invalid_time_format'))?>');
+                   e.target.setCustomValidity('<?php echo get_js_vocab('invalid_time_format')?>');
                  }
                });
     }
@@ -439,6 +431,43 @@ $(document).on('page_ready', function() {
       grandparent.find('.eye svg').toggle();
       input.attr('type', newType);
     });
+
+  <?php // De-obfuscate email addresses ?>
+  $('.contact').each(function() {
+    var decoded = base64Decode($(this).data('html'));
+    if (decoded !== false) {
+      $(this).replaceWith(decoded);
+    }
+  });
+
+  <?php // Add client-side validation of the file upload size ?>
+  $('input[type="file"]').on('change input', function(e) {
+    var maxFileSize = $(this).closest('form').find('[name="MAX_FILE_SIZE"]').val();
+    var message = '<?php echo get_js_vocab("max_allowed_file_size", ini_get('upload_max_filesize'))?>'
+    <?php // Check that we know MAX_FILE_SIZE and for browser support ?>
+    if(maxFileSize && e.target.files && e.target.files.length === 1) {
+      if (e.target.files[0].size > maxFileSize) {
+        e.target.setCustomValidity(message);
+        e.target.reportValidity();
+      }
+      else {
+        e.target.setCustomValidity('');
+      }
+    }
+  });
+
+  <?php
+  // There is a bug in some versions of Safari that means that the value
+  // of a form input field of type 'email' is not shown when the multiple
+  // attribute is set.  To get round this we convert those fields to type
+  // 'text', which forces the value to be displayed, and then convert them
+  // back again to 'email'.  See GitHub Issues #3716 and #3717.  See also
+  // https://stackoverflow.com/questions/78403943/safari-issues-with-input-type-email-and-multiple-attribute
+  // This workaround can be removed once Safari has been fixed.
+  ?>
+  $('input[type="email"][multiple]').each(function() {
+    $(this).attr('type', 'text').attr('type', 'email');
+  });
 
 });
 

@@ -3,8 +3,8 @@ namespace MRBS\Auth;
 
 /*
  * Authentication scheme that uses IMAP as the source for user
- * authentication. It requires you to have the PHP 'imap' extension
- * installed and enabled.
+ * authentication. If the PHP version is less than 8.0 it requires
+ * you to have the PHP 'imap' extension installed and enabled.
  *
  * To use this authentication scheme set the following
  * things in config.inc.php:
@@ -36,9 +36,32 @@ namespace MRBS\Auth;
  * $auth["admin"][] = "imapuser2";
  */
 
+use MRBS\Exception;
+use Webklex\PHPIMAP\ClientManager;
+use Webklex\PHPIMAP\Exceptions\AuthFailedException;
+use Webklex\PHPIMAP\Exceptions\ImapServerErrorException;
+
 class AuthImapPhp extends Auth
 {
-  /* authValidateUser($user, $pass)
+  private $canUseWebklex;
+
+  public function __construct()
+  {
+    assert(
+      version_compare(MRBS_MIN_PHP_VERSION, '8.0') < 0,
+      'The code below is no longer required.'
+    );
+    // The imap extension was removed in PHP 8.4 and so we use the Webklex/PHPIMAP library
+    // instead. However this requires PHP 8.0 or greater.
+    $this->canUseWebklex = (version_compare(PHP_VERSION, '8.0') >= 0);
+
+    if (!$this->canUseWebklex && !function_exists('imap_open'))
+    {
+      throw new Exception("The imap extension is not installed on this server.");
+    }
+  }
+
+  /* validateUser($user, $pass)
    *
    * Checks if the specified username/password pair are valid
    *
@@ -49,7 +72,11 @@ class AuthImapPhp extends Auth
    *   false    - The pair are invalid or do not exist
    *   string   - The validated username
    */
-  public function validateUser($user, $pass)
+  public function validateUser(
+    #[\SensitiveParameter]
+    ?string $user,
+    #[\SensitiveParameter]
+    ?string $pass)
   {
     global $auth;
 
@@ -61,13 +88,71 @@ class AuthImapPhp extends Auth
         return false;
       }
 
-      list($local_part, $domain) = explode('@', $user);
+      list(, $domain) = explode('@', $user);
 
       if ($domain != $auth['imap_php']['user_domain'])
       {
         return false;
       }
     }
+
+    if (!$this->canUseWebklex)
+    {
+      return $this->validateUserLegacy($user, $pass);
+    }
+
+    $cm = new ClientManager();
+
+    $config = [
+      'host'          => $auth['imap_php']['hostname'],
+      'username'      => $user,
+      'password'      => $pass,
+      'protocol'      => 'imap'
+    ];
+
+    // The defaults are chosen to be compatible with the legacy behaviour.
+    $config['port'] = $auth['imap_php']['port'] ?? 143;
+    $config['validate_cert'] = empty($auth['imap_php']['novalidate-cert']);
+    if (!empty($auth['imap_php']['ssl']))
+    {
+      $config['encryption'] = 'ssl';
+    }
+    elseif (!empty($auth['imap_php']['tls']))
+    {
+      $config['encryption'] = 'tls';
+    }
+    else
+    {
+      $config['encryption'] = '';
+    }
+
+    try {
+      $client = $cm->make($config);
+      $client->connect();  //Connect to the IMAP Server
+      return $user;
+    }
+    catch (ImapServerErrorException | AuthFailedException $e) {
+      // Don't do anything with these exceptions: they are normal when
+      // authentication fails.
+    }
+    catch (\Exception $e) {
+      // We weren't expecting any other exceptions so trigger an error.
+      $message = "Caught exception '" . get_class($e) . "'\n";
+      $message .= $e->getMessage() . "\n" . $e->getTraceAsString();
+      trigger_error($message, E_USER_WARNING);
+    }
+
+    return false;
+  }
+
+
+  private function validateUserLegacy(
+    #[\SensitiveParameter]
+    ?string $user,
+    #[\SensitiveParameter]
+    ?string $pass)
+  {
+    global $auth;
 
     $location = '{' . $auth['imap_php']['hostname'];
 
@@ -108,9 +193,16 @@ class AuthImapPhp extends Auth
 
 
   // Checks whether validation of a user by email address is possible and allowed.
-  public function canValidateByEmail()
+  public function canValidateByEmail() : bool
   {
     return true;
+  }
+
+
+  // Checks whether validation of a user by username is possible and allowed.
+  public function canValidateByUsername() : bool
+  {
+    return false;
   }
 
 }

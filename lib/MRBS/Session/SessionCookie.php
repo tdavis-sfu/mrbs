@@ -1,7 +1,11 @@
 <?php
+declare(strict_types=1);
 namespace MRBS\Session;
 
 use MRBS\User;
+use function MRBS\auth;
+use function MRBS\fatal_error;
+use function MRBS\get_cookie_path;
 
 
 // Manage sessions via cookies stored in the client browser
@@ -16,7 +20,7 @@ class SessionCookie extends SessionWithLogin
   {
     parent::__construct();
 
-    self::$cookie_path = \MRBS\get_cookie_path();
+    self::$cookie_path = get_cookie_path();
 
     // Delete old-style cookies
     if (!empty($_COOKIE) && isset($_COOKIE["UserName"]))
@@ -26,7 +30,13 @@ class SessionCookie extends SessionWithLogin
   }
 
 
-  public function getCurrentUser()
+  public function init(int $lifetime) : void
+  {
+    // The cookie session scheme doesn't use PHP sessions
+  }
+
+
+  public function getCurrentUser() : ?User
   {
     global $auth;
 
@@ -39,7 +49,7 @@ class SessionCookie extends SessionWithLogin
                               $auth['session_cookie']['hash_algorithm'],
                               $auth['session_cookie']['secret']);
 
-      $cached_user = (isset($data['user'])) ? $data['user'] : null;
+      $cached_user = (isset($data['user'])) ? $data['user'] : parent::getCurrentUser();
       $have_checked_cookie = true;
     }
 
@@ -47,7 +57,7 @@ class SessionCookie extends SessionWithLogin
   }
 
 
-  protected function logonUser($username)
+  protected function logonUser(string $username) : void
   {
     global $auth;
 
@@ -60,7 +70,7 @@ class SessionCookie extends SessionWithLogin
       $expiry_time = time() + $auth['session_cookie']['session_expire_time'];
     }
 
-    $user = \MRBS\auth()->getUser($username);
+    $user = auth()->getUser($username);
 
     self::setCookie('SessionToken',
                     $auth['session_cookie']['hash_algorithm'],
@@ -71,7 +81,7 @@ class SessionCookie extends SessionWithLogin
   }
 
 
-  public function logoffUser()
+  public function logoffUser() : void
   {
     // Delete cookie
     setcookie('SessionToken', '', time()-42000, self::$cookie_path);
@@ -79,7 +89,7 @@ class SessionCookie extends SessionWithLogin
 
 
   // Wrapper for setting cookies
-  public static function setCookie($name, $hash_algorithm, $secret, array $data, $expiry=0)
+  public static function setCookie(string $name, string $hash_algorithm, string $secret, array $data, int $expiry=0) : void
   {
     global $auth, $server;
 
@@ -90,7 +100,7 @@ class SessionCookie extends SessionWithLogin
 
     if ($auth['session_cookie']['include_ip'])
     {
-      $data['ip'] = isset($server['REMOTE_ADDR']) ? $server['REMOTE_ADDR'] : null;
+      $data['ip'] = $server['REMOTE_ADDR'] ?? null;
     }
 
     $json_data = json_encode($data);
@@ -98,13 +108,13 @@ class SessionCookie extends SessionWithLogin
     $hash = self::getHash($hash_algorithm, $json_data, $secret);
 
     setcookie($name,
-              "${hash}_" . base64_encode($json_data),
+              "{$hash}_" . base64_encode($json_data),
               $expiry,
               self::$cookie_path);
   }
 
 
-  public static function getCookie($name, $hash_algorithm, $secret)
+  public static function getCookie(string $name, string $hash_algorithm, string $secret) : array
   {
     global $auth, $server;
 
@@ -175,13 +185,13 @@ class SessionCookie extends SessionWithLogin
   }
 
 
-  private static function getHash($algo, $data, $key)
+  private static function getHash(string $algo, string $data, string $key) : string
   {
     if (!function_exists('hash_hmac'))
     {
-      \MRBS\fatal_error("It appears that your PHP has the hash functions " .
-                        "disabled, which are required for the 'cookie' " .
-                        "session scheme.");
+      fatal_error("It appears that your PHP has the hash functions " .
+                  "disabled, which are required for the 'cookie' " .
+                  "session scheme.");
     }
 
     return hash_hmac($algo, $data, $key);

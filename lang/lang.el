@@ -183,7 +183,6 @@ $vocab["administration"]     = "Διαχείριση";
 // Used in edit_area.php and/or edit_room.php
 $vocab["editarea"]           = "Τροποποίηση περιοχής";
 $vocab["change"]             = "Αλλαγή";
-$vocab["backadmin"]          = "Επιστροφή στην διαχείριση";
 $vocab["editroom"]           = "Τροποποίηση αίθουσας";
 $vocab["not_found"]          = " δεν βρέθηκε";
 $vocab["room_admin_email"]   = "Room admin email";
@@ -201,8 +200,7 @@ $vocab["delarea"]            = "Πρέπει να διαγράψετε όλες 
 $vocab["about_mrbs"]         = "Σχετικά με το MRBS";
 $vocab["database"]           = "Βάση δεδομένων";
 $vocab["system"]             = "Σύστημα";
-$vocab["please_contact"]     = "Παρακαλώ επικοινωνήστε με ";
-$vocab["for_any_questions"]  = "για όσες ερωτήσεις δεν απαντώνται εδώ.";
+$vocab["please_contact"]     = "Παρακαλώ επικοινωνήστε με %s για όσες ερωτήσεις δεν απαντώνται εδώ.";
 
 // Entry types
 $vocab["type.I"]             = "Εσωτερικά";

@@ -1,8 +1,13 @@
 <?php
+declare(strict_types=1);
 namespace MRBS\Session;
 
-use \phpCAS;
 use MRBS\Form\Form;
+use MRBS\User;
+use phpCAS;
+use function MRBS\auth;
+use function MRBS\location_header;
+use function MRBS\this_page;
 
 
 class SessionCas extends SessionWithLogin
@@ -11,37 +16,47 @@ class SessionCas extends SessionWithLogin
   public function __construct()
   {
     $this->checkTypeMatchesSession();
-    \MRBS\auth()->init();  // Initialise CAS
+    $this->samesite = self::SAMESITE_LAX;
+    auth()->init();  // Initialise CAS
     parent::__construct();
   }
 
 
-  public function authGet($target_url=null, $returl=null, $error=null, $raw=false)
+  public function init(int $lifetime) : void
   {
-    // Useless Method - CAS does it all
+    // phpCAS does its own session initialisation and handling
   }
 
 
-  public function getCurrentUser()
+  public function authGet(?string $target_url=null, ?string $returl=null, ?string $error=null, bool $raw=false) : void
   {
-    return (phpCAS::isAuthenticated()) ? \MRBS\auth()->getUser(phpCAS::getUser()) : null;
+    if (!phpCAS::isAuthenticated())
+    {
+      phpCAS::forceAuthentication();
+    }
   }
 
 
-  public function getLogonFormParams()
+  public function getCurrentUser() : ?User
   {
-    $target_url = \MRBS\this_page(true);
+    return (phpCAS::isAuthenticated()) ? auth()->getUser(phpCAS::getUser()) : parent::getCurrentUser();
+  }
+
+
+  public function getLogonFormParams() : ?array
+  {
+    $target_url = this_page(true);
 
     return array(
         'action' => $target_url,
-        'method' => 'post',
+        'method' => Form::METHOD_POST,
         'hidden_inputs' =>  array('target_url' => $target_url,
                                   'action'     => 'QueryName')
       );
   }
 
 
-  public function processForm()
+  public function processForm() : void
   {
     if (isset($this->form['action']))
     {
@@ -62,13 +77,13 @@ class SessionCas extends SessionWithLogin
         // link, no matter what the value of the form parameters.
         $this->logoffUser();
 
-        \MRBS\location_header($this->form['target_url']); // Redirect browser to initial page
+        location_header($this->form['target_url']); // Redirect browser to initial page
       }
     }
   }
 
 
-  public function logoffUser()
+  public function logoffUser() : void
   {
     phpCAS::logout();
   }

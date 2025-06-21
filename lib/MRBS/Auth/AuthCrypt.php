@@ -23,7 +23,7 @@ namespace MRBS\Auth;
 
 class AuthCrypt extends Auth
 {
-  /* authValidateUser($user, $pass)
+  /* validateUser($user, $pass)
    *
    * Checks if the specified username/password pair are valid
    *
@@ -34,7 +34,11 @@ class AuthCrypt extends Auth
    *   false    - The pair are invalid or do not exist
    *   string   - The validated username
    */
-  public function validateUser($user, $pass)
+  public function validateUser(
+    #[\SensitiveParameter]
+    ?string $user,
+    #[\SensitiveParameter]
+    ?string $pass)
   {
     global $auth;
 

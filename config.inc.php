@@ -149,7 +149,6 @@ unset($auth["admin"]);              // Include this when copying to config.inc.p
 $auth["admin"][] = "127.0.0.1";     // localhost IP address. Useful with IP sessions.
 $auth["admin"][] = "admin"; 
 $auth["admin"][] = "tjdavis";
-$auth["admin"][] = "ashley";
 
 // A user name from the user list. Useful
                                     // with most other session schemes.

@@ -1,32 +1,51 @@
 <?php
+declare(strict_types=1);
 namespace MRBS\Session;
 
-use MRBS\Form\FieldDiv;
-use MRBS\Form\Form;
 use MRBS\Form\ElementA;
 use MRBS\Form\ElementFieldset;
 use MRBS\Form\ElementP;
+use MRBS\Form\FieldDiv;
 use MRBS\Form\FieldInputPassword;
 use MRBS\Form\FieldInputSubmit;
 use MRBS\Form\FieldInputText;
+use MRBS\Form\Form;
+use function MRBS\auth;
+use function MRBS\get_form_var;
+use function MRBS\get_vocab;
+use function MRBS\location_header;
+use function MRBS\multisite;
+use function MRBS\print_footer;
+use function MRBS\print_header;
+use function MRBS\this_page;
+use function MRBS\utf8_strpos;
 
 
 // An abstract class for those session schemes that implement a login form
-abstract class SessionWithLogin implements SessionInterface
+abstract class SessionWithLogin extends Session
 {
   protected $form = array();
 
 
   public function __construct()
   {
+    parent::__construct();
+
     // Get non-standard form variables
-    foreach (array('action', 'username', 'password', 'target_url', 'returl') as $var)
+    foreach (array('action', 'username', 'password', 'returl') as $var)
     {
-      $this->form[$var] = \MRBS\get_form_var($var, 'string', null, INPUT_POST);
+      $this->form[$var] = get_form_var($var, 'string', null, INPUT_POST);
     }
 
-    // It's easy for extra spaces to appear, especially on a mobile device
-    $this->form['username'] = trim($this->form['username']);
+    // Allow the target_url to be a GET or POST value to help password managers (the target_url can
+    // be stored as a query string parameter in the password manager).
+    $this->form['target_url'] = get_form_var('target_url');
+
+    if (isset($this->form['username']))
+    {
+      // It's easy for extra spaces to appear, especially on a mobile device
+      $this->form['username'] = trim($this->form['username']);
+    }
   }
 
 
@@ -34,45 +53,43 @@ abstract class SessionWithLogin implements SessionInterface
   //
   //    $target_url   The URL to go to after successful login
   //    $returl       The URL to return to eventually
-  public function authGet($target_url=null, $returl=null, $error=null, $raw=false)
+  public function authGet(?string $target_url=null, ?string $returl=null, ?string $error=null, bool $raw=false) : void
   {
     if (!isset($target_url))
     {
-      $target_url = \MRBS\this_page(true);
+      $target_url = $this->form['target_url'] ?? this_page(true);
     }
 
     // Omit the Login link in the header when we're on the login page itself
-    \MRBS\print_header(null, null, true);
-    $action = \MRBS\multisite(\MRBS\this_page());
+    print_header(null, false, true);
+    $action = multisite(this_page());
     $this->printLoginForm($action, $target_url, $returl, $error, $raw);
     exit;
   }
 
 
-  abstract public function getCurrentUser();
-
-
   // Returns the parameters ('method', 'action' and 'hidden_inputs') for a
   // Logon form.  Returns an array.
-  public function getLogonFormParams()
+  public function getLogonFormParams() : ?array
   {
     return array(
-        'action' => \MRBS\multisite('admin.php'),
-        'method' => 'post',
-        'hidden_inputs' =>  array('target_url' => \MRBS\this_page(true),
+        'action' => multisite('admin.php'),
+        'method' => Form::METHOD_POST,
+        'hidden_inputs' =>  array('target_url' => this_page(true),
                                   'action'     => 'QueryName')
       );
   }
 
 
   // Returns the parameters ('method', 'action' and 'hidden_inputs') for a
-  // Logoff form.  Returns an array.
-  public function getLogoffFormParams()
+  // logoff form.  Returns an array of parameters, or null if no form is to be
+  // shown.
+  public function getLogoffFormParams() : ?array
   {
     return array(
-        'action' => \MRBS\multisite('admin.php'),
-        'method' => 'post',
-        'hidden_inputs' =>  array('target_url' => \MRBS\this_page(true),
+        'action' => multisite('admin.php'),
+        'method' => Form::METHOD_POST,
+        'hidden_inputs' =>  array('target_url' => this_page(true),
                                   'action'     => 'SetName',
                                   'username'   => '',
                                   'password'   => '')
@@ -80,7 +97,7 @@ abstract class SessionWithLogin implements SessionInterface
   }
 
 
-  public function processForm()
+  public function processForm() : void
   {
     if (isset($this->form['action']))
     {
@@ -119,23 +136,28 @@ abstract class SessionWithLogin implements SessionInterface
           if (!empty($this->form['returl']))
           {
             // check to see whether there's a query string already
-            $this->form['target_url'] .= (\MRBS\utf8_strpos($this->form['target_url'], '?') === false) ? '?' : '&';
+            $this->form['target_url'] .= (utf8_strpos($this->form['target_url'], '?') === false) ? '?' : '&';
             $this->form['target_url'] .= 'returl=' . urlencode($this->form['returl']);
           }
         }
 
-        \MRBS\location_header($this->form['target_url']); // Redirect browser to initial page
+        location_header($this->form['target_url']); // Redirect browser to initial page
       }
     }
   }
 
 
   // Can only return a valid username.  If the username and password are not valid it will ask for new ones.
-  protected function getValidUser($username, $password)
+  protected function getValidUser(
+    #[\SensitiveParameter]
+    ?string $username,
+    #[\SensitiveParameter]
+    ?string $password) : string
   {
-    if (($valid_username = \MRBS\auth()->validateUser($this->form['username'], $this->form['password'])) === false)
+    if (!isset($this->form['password']) ||
+        (($valid_username = auth()->validateUser($this->form['username'], $this->form['password'])) === false))
     {
-      $this->authGet($this->form['target_url'], $this->form['returl'], \MRBS\get_vocab('unknown_user'));
+      $this->authGet($this->form['target_url'], $this->form['returl'], get_vocab('unknown_user'));
       exit(); // unnecessary because authGet() exits, but just included for clarity
     }
 
@@ -143,12 +165,12 @@ abstract class SessionWithLogin implements SessionInterface
   }
 
 
-  protected function logonUser($username)
+  protected function logonUser(string $username) : void
   {
   }
 
 
-  public function logoffUser()
+  public function logoffUser() : void
   {
   }
 
@@ -157,12 +179,11 @@ abstract class SessionWithLogin implements SessionInterface
   // Will eventually return to $target_url with query string returl=$returl
   // If $error is set then an $error is printed.
   // If $raw is true then the message is not HTML escaped
-  private function printLoginForm($action, $target_url, $returl, $error=null, $raw=false)
+  private function printLoginForm(string $action, ?string $target_url, ?string $returl, ?string $error=null, bool $raw=false) : void
   {
-    $form = new Form();
+    $form = new Form(Form::METHOD_POST);
     $form->setAttributes(array('class'  => 'standard',
                                'id'     => 'logon',
-                               'method' => 'post',
                                'action' => $action));
 
     // Hidden inputs
@@ -180,14 +201,26 @@ abstract class SessionWithLogin implements SessionInterface
     }
 
     $fieldset = new ElementFieldset();
-    $fieldset->addLegend(\MRBS\get_vocab('please_login'));
+    $fieldset->addLegend(get_vocab('please_login'));
 
     // The username field
-    $tag = (\MRBS\auth()->canValidateByEmail()) ? 'username_or_email' : 'users.name';
-    $placeholder = \MRBS\get_vocab($tag);
+    if (auth()->canValidateByEmail() && auth()->canValidateByUsername())
+    {
+      $tag = 'username_or_email';
+    }
+    elseif (auth()->canValidateByUsername())
+    {
+      $tag = 'users.name';
+    }
+    else
+    {
+      $tag = 'users.email';
+    }
+
+    $placeholder = get_vocab($tag);
 
     $field = new FieldInputText();
-    $field->setLabel(\MRBS\get_vocab('user'))
+    $field->setLabel(get_vocab('user'))
           ->setLabelAttributes(array('title' => $placeholder))
           ->setControlAttributes(array('id'           => 'username',
                                        'name'         => 'username',
@@ -199,7 +232,7 @@ abstract class SessionWithLogin implements SessionInterface
 
     // The password field
     $field = new FieldInputPassword();
-    $field->setLabel(\MRBS\get_vocab('users.password'))
+    $field->setLabel(get_vocab('users.password'))
           ->setControlAttributes(array('id'           => 'password',
                                        'name'         => 'password',
                                        'autocomplete' => 'current-password'));
@@ -210,18 +243,18 @@ abstract class SessionWithLogin implements SessionInterface
     // The submit button
     $fieldset = new ElementFieldset();
     $field = new FieldInputSubmit();
-    $field->setControlAttributes(array('value' => \MRBS\get_vocab('login')));
+    $field->setControlAttributes(array('value' => get_vocab('login')));
     $fieldset->addElement($field);
 
     $form->addElement($fieldset);
 
-    if (\MRBS\auth()->canResetPassword())
+    if (auth()->canResetPassword())
     {
       $fieldset = new ElementFieldset();
       $field = new FieldDiv();
       $a = new ElementA();
-      $a->setAttribute('href', \MRBS\multisite('reset_password.php'))
-        ->setText(\MRBS\get_vocab('lost_password'));
+      $a->setAttribute('href', multisite('reset_password.php'))
+        ->setText(get_vocab('lost_password'));
       $field->addControl($a);
       $fieldset->addElement($field);
       $form->addElement($fieldset);
@@ -232,14 +265,14 @@ abstract class SessionWithLogin implements SessionInterface
 
 
     // Print footer and exit
-    \MRBS\print_footer(true);
+    print_footer(true);
   }
 
 
   // Check we've got the right authentication type for the session scheme.
   // To be called for those session schemes which require the same
   // authentication type
-  protected function checkTypeMatchesSession()
+  protected function checkTypeMatchesSession() : void
   {
     global $auth;
 

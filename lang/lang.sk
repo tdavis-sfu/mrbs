@@ -319,7 +319,7 @@ $vocab["delete_entries"]        = "Odstránenie položiek";
 $vocab["delete_entries_warning"] = "UPOZORNENIE! Vymaže všetky položky odpovedajúce " .
                                    "danému hľadanému reťazcu. Túto operáciu nemožno vrátiť späť. Naozaj " .
                                    "chcete pokračovať?\n\n" .
-                                   "Celkový počet položiek, ktoré budú zmazané: ";
+                                   "Celkový počet položiek, ktoré budú zmazané: %%s"; // The % sign is escaped because the string substitution is done by JavaScript
 $vocab["delete_entries_failed"] = "Položky nemôžu byť odstránené.";
 
 // Used in admin.php
@@ -344,7 +344,6 @@ $vocab["empty_name"]         = "Nevložili ste meno!";
 // Used in edit_area.php and/or edit_room.php
 $vocab["editarea"]                = "Upraviť oblasť";
 $vocab["change"]                  = "Potvrdiť";
-$vocab["backadmin"]               = "Späť do zdrojov";
 $vocab["editroom"]                = "Upraviť zdroj";
 $vocab["viewroom"]                = "Zobraziť zdroj";
 $vocab["not_found"]               = " nenájdený";
@@ -426,8 +425,7 @@ $vocab["about_mrbs"]         = "O rezervačnom systéme";
 $vocab["database"]           = "Databáza";
 $vocab["system"]             = "Systém";
 $vocab["servertime"]         = "Čas servera";
-$vocab["please_contact"]     = "Prosím kontaktujte ";
-$vocab["for_any_questions"]  = "pre všetky otázky, ktoré tu nie sú zodpovedané.";
+$vocab["please_contact"]     = "Prosím kontaktujte %s pre všetky otázky, ktoré tu nie sú zodpovedané.";
 
 // Used in import.php
 $vocab["import_icalendar"]            = "Import iCalendar súboru";
@@ -440,7 +438,7 @@ $vocab["import_intro"]                = "Tento formulár umožňuje naimportova�
 $vocab["file_name"]                   = "Súbor";
 $vocab["import"]                      = "Import";
 $vocab["upload_failed"]               = "Načítanie sa nepodarilo";
-$vocab["max_allowed_file_size"]       = "Maximálna povolená veľkosť súboru je";
+$vocab["max_allowed_file_size"]       = "Maximálna povolená veľkosť súboru je %s";
 $vocab["no_file"]                     = "Žiadny súbor nebol načítaný";
 $vocab["badly_formed_ics"]            = "Nesprávne formátovanie VCALENDAR súboru";
 $vocab["area_room_order"]             = "Triedenie";

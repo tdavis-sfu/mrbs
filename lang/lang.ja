@@ -304,7 +304,7 @@ $vocab["delete_entries"]        = "エントリーを削除する";
 $vocab["delete_entries_warning"] = "警告! この操作は、検索文字列に一致する全てのエントリーを削除します。 " .
                                    "操作を取り消すことはできません。" .
                                    "継続してもよろしいですが\n\n" .
-                                   "削除されるエントリーの合計: ";
+                                   "削除されるエントリーの合計: %%s"; // The % sign is escaped because the string substitution is done by JavaScript
 $vocab["delete_entries_failed"] = "エントリーを削除することができませんでした。";
 
 // Used in admin.php
@@ -329,7 +329,6 @@ $vocab["empty_name"]         = "名前が入力されていません!";
 // Used in edit_area.php and/or edit_room.php
 $vocab["editarea"]                = "部署を編集";
 $vocab["change"]                  = "変更";
-$vocab["backadmin"]               = "部屋に戻る";
 $vocab["editroom"]                = "部屋を編集";
 $vocab["viewroom"]                = "部屋を見る";
 $vocab["not_found"]               = "は見つかりませんでした";
@@ -411,8 +410,7 @@ $vocab["about_mrbs"]         = "MRBSについて";
 $vocab["database"]           = "データベース";
 $vocab["system"]             = "システム";
 $vocab["servertime"]         = "サーバ時間";
-$vocab["please_contact"]     = "ここに答えがない質問は、";
-$vocab["for_any_questions"]  = "にお尋ねください。";
+$vocab["please_contact"]     = "ここに答えがない質問は、%s にお尋ねください。";
 
 // Used in import.php
 $vocab["import_icalendar"]            = "iCalendarファイルをインポートする";
@@ -425,7 +423,7 @@ $vocab["import_intro"]                = "このフォームでは、RFC 5545に�
 $vocab["file_name"]                   = "ファイル";
 $vocab["import"]                      = "インポート";
 $vocab["upload_failed"]               = "アップロードに失敗しました";
-$vocab["max_allowed_file_size"]       = "最大許容ファイルサイズ: ";
+$vocab["max_allowed_file_size"]       = "最大許容ファイルサイズ: %s";
 $vocab["no_file"]                     = "ファイルがアップロードされませんでした";
 $vocab["badly_formed_ics"]            = "フォーマットが壊れたVCALENDARファイルです";
 $vocab["area_room_order"]             = "順序";

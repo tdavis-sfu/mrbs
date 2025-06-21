@@ -1,10 +1,11 @@
 <?php
+declare(strict_types=1);
 namespace MRBS\Session;
 
 
 // Get user identity/password using the REMOTE_USER environment variable.
 // Both identity and password equal the value of REMOTE_USER.
-// 
+//
 // To use this session scheme, set in config.inc.php:
 //
 //                    $auth['session']  = 'remote_user';
@@ -19,39 +20,43 @@ namespace MRBS\Session;
 //                    $auth['remote_user']['logout_link'] = '/logout/link.html';
 
 
+use MRBS\Form\Form;
+use MRBS\User;
+use function MRBS\auth;
+
 class SessionRemoteUser extends SessionWithLogin
 {
 
   // User is expected to already be authenticated by the web server, so do nothing
-  public function authGet($target_url=null, $returl=null, $error=null, $raw=false)
+  public function authGet(?string $target_url=null, ?string $returl=null, ?string $error=null, bool $raw=false) : void
   {
   }
-  
-  
-  public function getCurrentUser()
+
+
+  public function getCurrentUser() : ?User
   {
     global $server;
-    
+
     if ((!isset($server['REMOTE_USER'])) ||
         (!is_string($server['REMOTE_USER'])) ||
         (($server['REMOTE_USER'] === '')))
     {
-      return null;
-    } 
+      return parent::getCurrentUser();
+    }
 
-    return \MRBS\auth()->getUser($server['REMOTE_USER']);
+    return auth()->getUser($server['REMOTE_USER']);
   }
-  
-  
-  public function getLogonFormParams()
+
+
+  public function getLogonFormParams() : ?array
   {
     global $auth;
-    
+
     if (isset($auth['remote_user']['login_link']))
     {
       return array(
           'action' => $auth['remote_user']['login_link'],
-          'method' => 'get'
+          'method' => Form::METHOD_GET,
         );
     }
     else
@@ -59,17 +64,17 @@ class SessionRemoteUser extends SessionWithLogin
       return null;
     }
   }
-  
-  
-  public function getLogoffFormParams()
+
+
+  public function getLogoffFormParams() : ?array
   {
     global $auth;
-    
+
     if (isset($auth['remote_user']['logout_link']))
     {
       return array(
           'action' => $auth['remote_user']['logout_link'],
-          'method' => 'get'
+          'method' => Form::METHOD_GET
         );
     }
     else

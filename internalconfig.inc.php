@@ -1,4 +1,5 @@
 <?php
+declare(strict_types=1);
 namespace MRBS;
 
 // This file contains internal configuration settings and checking.   You should not
@@ -18,7 +19,7 @@ if (isset($provisional_enabled))
   $message = 'Please check your config file.   The variable $provisional_enabled ' .
              'is no longer used and has been replaced by $approval_enabled.';
   trigger_error($message, E_USER_NOTICE);
-  $approval_enabled = ($provisional_enabled) ? TRUE : FALSE;
+  $approval_enabled = (bool) $provisional_enabled;
 }
 
 // Variables no longer used in versions of MRBS > 1.4.5
@@ -31,7 +32,7 @@ if (isset($mail_settings['admin_all']))
              'is no longer used and has been replaced by $mail_settings["on_new"], ' .
              '$mail_settings["on_change"] and $mail_settings["on_delete"].';
   trigger_error($message, E_USER_NOTICE);
-  $mail_settings['on_change'] = ($mail_settings['admin_all']) ? TRUE : FALSE;
+  $mail_settings['on_change'] = (bool) $mail_settings['admin_all'];
 }
 
 if (isset($mail_settings['admin_on_delete']))
@@ -39,15 +40,15 @@ if (isset($mail_settings['admin_on_delete']))
   $message = 'Please check your config file.   The variable $mail_settings["admin_on_delete"] ' .
              'is no longer used and has been replaced by $mail_settings["on_delete"].';
   trigger_error($message, E_USER_NOTICE);
-  $mail_settings['on_delete'] = ($mail_settings['admin_on_delete']) ? TRUE : FALSE;
+  $mail_settings['on_delete'] = (bool) $mail_settings['admin_on_delete'];
 }
 
-if (!empty($dateformat))
+if (isset($dateformat))
 {
-  $message = 'Please check your config file.   The variable $dateformat ' .
-             'is no longer used and has been replaced by $strftime_format["daymonth"].';
-  trigger_error($message, E_USER_WARNING);
-  $strftime_format['daymonth']     = "%d %b";
+  $message = 'Please check your config file. The setting $dateformat ' .
+             'is no longer used and has been replaced by $datetime_formats. ' .
+             'See systemdefaults.inc.php for more details.';
+  trigger_error($message, E_USER_NOTICE);
 }
 
 // Variables no longer used in versions of MRBS > 1.4.7
@@ -79,8 +80,8 @@ if (isset($min_book_ahead_enabled))
              'is no longer used and has been replaced by $min_create_ahead_enabled ' .
              'and $min_delete_ahead_enabled.';
   trigger_error($message, E_USER_WARNING);
-  $min_create_ahead_enabled = ($min_book_ahead_enabled) ? TRUE : FALSE;
-  $min_delete_ahead_enabled = ($min_book_ahead_enabled) ? TRUE : FALSE;
+  $min_create_ahead_enabled = (bool) $min_book_ahead_enabled;
+  $min_delete_ahead_enabled = (bool) $min_book_ahead_enabled;
 }
 
 if (isset($max_book_ahead_enabled))
@@ -89,7 +90,7 @@ if (isset($max_book_ahead_enabled))
              'is no longer used and has been replaced by $max_create_ahead_enabled ' .
              'and $max_delete_ahead_enabled.';
   trigger_error($message, E_USER_WARNING);
-  $max_create_ahead_enabled = ($max_book_ahead_enabled) ? TRUE : FALSE;
+  $max_create_ahead_enabled = (bool) $max_book_ahead_enabled;
   // No need to do anything about $max_delete_ahead_enabled as it didn't apply in the old system
 }
 
@@ -169,6 +170,23 @@ if (false !== ($key = array_search('rooms', $edit_entry_field_order)))
   trigger_error($message, E_USER_NOTICE);
 }
 
+// Variables no longer used in versions of MRBS > 1.11.0
+if (isset($twentyfourhour_format))
+{
+  $message = 'Please check your config file. The setting $twentyfourhour_format ' .
+             'is no longer used and whether a 12 or 24-hour clock is used is determined ' .
+             'by the locale. See systemdefaults.inc.php for more details.';
+  trigger_error($message, E_USER_NOTICE);
+}
+
+if (isset($strftime_format))
+{
+  $message = 'Please check your config file. The setting $strftime_format ' .
+             'is no longer used and has been replaced by $datetime_formats. ' .
+             'See systemdefaults.inc.php for more details.';
+  trigger_error($message, E_USER_NOTICE);
+}
+
 
 /********************************************************
  * Checking
@@ -224,11 +242,6 @@ else
 
  define('DOCTYPE', '<!DOCTYPE html>');
 
- // Records which DOCTYPE is being used.    Do not change - it will not change the DOCTYPE
- // that is used;  it is merely used when the code needs to know the DOCTYPE, for example
- // in calls to nl2br.   TRUE means XHTML, FALSE means HTML.
- define('IS_XHTML', FALSE);
-
 
 /*************************************************
  * General constants - internal use, do not change
@@ -251,6 +264,10 @@ define('SUMMARY',      1);
 define('OUTPUT_HTML',  0);
 define('OUTPUT_CSV',   1);
 define('OUTPUT_ICAL',  2);
+
+// Fallback values
+define('FALLBACK_SORTBY', 'r');
+define('FALLBACK_SUMBY',  'c');
 
 // Constants for matching boolean fields
 define('BOOLEAN_MATCH_FALSE', 0);
@@ -311,37 +328,11 @@ define('STATUS_TENTATIVE',         0x04);
 
 
 /*************************************************
- * REPEAT TYPE CODES - internal use, do not change
- *************************************************/
-
-define('REP_NONE',            0);
-define('REP_DAILY',           1);
-define('REP_WEEKLY',          2);
-define('REP_MONTHLY',         3);
-define('REP_YEARLY',          4);
-
-define('REP_MONTH_ABSOLUTE', 0);
-define('REP_MONTH_RELATIVE', 1);
-
-
-/*************************************************
  * DIRECTORIES - internal use, do not change
  *************************************************/
 
 define('TZDIR',         'tzurl/zoneinfo');          // Directory containing TZURL definitions
 define('TZDIR_OUTLOOK', 'tzurl/zoneinfo-outlook');  // Outlook compatible TZURL definitions
-
-
-/*****************************************
- * ICALENDAR - internal use, do not change
- *****************************************/
-
-define ('RFC5545_FORMAT', 'Ymd\THis');  // Format for expressing iCalendar dates
-define ('ICAL_EOL', "\r\n");            // Lines must be terminated by CRLF
-
-// Create an array which can be used to map day of the week numbers (0..6)
-// onto days of the week as defined in RFC 5545
-$RFC_5545_days = array('SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA');
 
 
 /****************************************************************
@@ -524,20 +515,5 @@ $area_defaults['max_secs_per_year']             = $max_secs_per_interval_area['y
 $area_defaults['max_secs_per_future_enabled']   = $max_secs_per_interval_area_enabled['future'];
 $area_defaults['max_secs_per_future']           = $max_secs_per_interval_area['future'];
 
-
-// We send Ajax requests to ajax/del_entries.php with data as an array of ids.
-// In order to stop the POST request getting too large and triggering a 406
-// error, we split the requests into batches with a maximum number of ids
-// in the array defined below.
-define('DEL_ENTRIES_AJAX_BATCH_SIZE', 100);
-
 // Interval types used in booking policies
 $interval_types = array('day', 'week', 'month', 'year', 'future');
-
-
-/********************************************************
- * JavaScript - internal use, do not change
- ********************************************************/
-
-// Puts Javascript into strict mode
-$use_strict = true;

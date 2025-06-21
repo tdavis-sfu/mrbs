@@ -327,7 +327,7 @@ $vocab["delete_entries"]        = "Sterge rezervari";
 $vocab["delete_entries_warning"] = "ATENTIE!  Se vor sterge toate rezervarile continand" .
                                    "string de cautare.  Operatia nu poate fi reversibila.  Esti " .
                                    "sigur ca vrei sa continui?\n\n" .
-                                   "Numar total de rezervari ce vor fi sterse: ";
+                                   "Numar total de rezervari ce vor fi sterse: %%s"; // The % sign is escaped because the string substitution is done by JavaScript
 $vocab["delete_entries_failed"] = "Rezervarile nu au putut fi sterse.";
 
 // Used in admin.php
@@ -352,7 +352,6 @@ $vocab["empty_name"]         = "Nu ai introdus un nume!";
 // Used in edit_area.php and/or edit_room.php
 $vocab["editarea"]                = "Modifica Zona";
 $vocab["change"]                  = "Modificare";
-$vocab["backadmin"]               = "Inapoi La Sali";
 $vocab["editroom"]                = "Modifica Sala";
 $vocab["viewroom"]                = "Vizualizeaza Sala";
 $vocab["not_found"]               = " nu a fost gasita";
@@ -445,8 +444,7 @@ $vocab["database"]           = "Baza de date";
 $vocab["system"]             = "System";
 $vocab["servertime"]         = "Timp server";
 $vocab["server_software"]    = "Software server";
-$vocab["please_contact"]     = "Contacteaza ";
-$vocab["for_any_questions"]  = "pentru orice intrebare fara raspuns aici.";
+$vocab["please_contact"]     = "Contacteaza %s pentru orice intrebare fara raspuns aici.";
 
 // Used in import.php
 $vocab["import_icalendar"]            = "Importa un fisier iCalendar";
@@ -464,7 +462,7 @@ $vocab["import_bzip2"]                = "fisiere bzip2";
 $vocab["file_name"]                   = "Fisier";
 $vocab["import"]                      = "Importa";
 $vocab["upload_failed"]               = "Incarcare esuata";
-$vocab["max_allowed_file_size"]       = "Dimensiunea maxima permisa este";
+$vocab["max_allowed_file_size"]       = "Dimensiunea maxima permisa este %s";
 $vocab["no_file"]                     = "Niciun fisier nu a fost incarcat";
 $vocab["could_not_process"]           = "Import esuat: nu s-a putut procesa fisierul";
 $vocab["badly_formed_ics"]            = "Fisier VCALENDAR format incorect";

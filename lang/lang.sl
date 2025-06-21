@@ -195,7 +195,6 @@ $vocab["administration"]     = "Administracija";
 // Used in edit_area.php and/or edit_room.php
 $vocab["editarea"]           = "Uredi področje";
 $vocab["change"]             = "Uporabi";
-$vocab["backadmin"]          = "Nazaj v Admin";
 $vocab["editroom"]           = "Uredi prostor";
 $vocab["not_found"]          = " ne najdem";
 $vocab["room_admin_email"]   = "e-pošta upravnika prostora";
@@ -214,8 +213,7 @@ $vocab["about_mrbs"]         = "O MRBS";
 $vocab["database"]           = "Podatkovna zbirka";
 $vocab["system"]             = "Sistem";
 $vocab["servertime"]         = "Čas strežnika";
-$vocab["please_contact"]     = "Na dodatna vprašanja vam bo odgovoril ";
-$vocab["for_any_questions"]  = ".";
+$vocab["please_contact"]     = "Na dodatna vprašanja vam bo odgovoril %s.";
 
 // Entry types
 $vocab["type.I"]             = "Interno";

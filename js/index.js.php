@@ -1,16 +1,16 @@
 <?php
+declare(strict_types=1);
 namespace MRBS;
 
 require '../defaultincludes.inc';
 
 http_headers(array("Content-type: application/x-javascript"),
              60*30);  // 30 minute expiry
+?>
 
-if ($use_strict)
-{
-  echo "'use strict';\n";
-}
+'use strict';
 
+<?php
 // Check whether the calendar navigation bar has wrapped, and if so add a class of
 // 'wrapped' so that CSS can be used to change its styling.
 ?>
@@ -89,10 +89,10 @@ var replaceBody = function(response, href) {
               {
                 <?php
                 // Data attributes have to be updated differently from other attributes because
-                // they are cached by jQuery.  If the attribute looks like a JSON array, then turn
-                // it back into an array.
+                // they are cached by jQuery.
                 ?>
                 var value = this.value;
+                <?php // If the attribute looks like a JSON array, then turn it back into an array. ?>
                 if (value.charAt(0) === '[')
                 {
                   try {
@@ -101,6 +101,15 @@ var replaceBody = function(response, href) {
                   catch (e) {
                     value = this.value;
                   }
+                }
+                <?php // If it looks like it should be a boolean then turn it back into one.  ?>
+                else if (value === 'true')
+                {
+                  value = true;
+                }
+                else if (value === 'false')
+                {
+                  value = false;
                 }
                 body.data(this.name.substring(5), value);
               }
@@ -118,8 +127,17 @@ var replaceBody = function(response, href) {
     ?>
     $(document).trigger('page_ready');
 
+    <?php // and tell the server we've moved to a new page, so that it can update its records ?>
+    var data = {csrf_token: getCSRFToken(), page: href};
+    if(args.site)
+    {
+      data.site = args.site;
+    }
+    $.post('ajax/update_page.php', data);
+
     <?php // change the URL in the address bar ?>
     history.pushState(null, '', href);
+
   };
 
 
@@ -144,7 +162,7 @@ var updateBody = function(event) {
     }
 
     <?php // Add a "Loading ..." message ?>
-    $('h2.date').text('<?php echo get_vocab('loading')?>')
+    $('h2.date').text('<?php echo get_js_vocab('loading')?>')
                 .addClass('loading');
 
     if (updateBody.prefetched && updateBody.prefetched[href])
@@ -153,13 +171,26 @@ var updateBody = function(event) {
     }
     else
     {
-      $.get({
-          url: href,
-          dataType: 'html',
-          success: function(response) {
-            replaceBody(response, href);
-          }
-        });
+      <?php
+      // Keep track of the last Ajax request, because it's only that one that we're
+      // interested in: if the server is slow and the user clicks on a succession
+      // of dates, we only want to show the data for the last date.
+      ?>
+      updateBody.lastRequest = href;
+      <?php
+      // We don't want a refresh to happen while we're waiting for the next date.
+      ?>
+      refreshPage.disabled = true;
+      $.get({url: href, dataType: 'html'})
+        .done(function(response) {
+            <?php // Only process this response if it corresponds to the last request ?>
+            if (href === updateBody.lastRequest)
+            {
+              updateBody.lastRequest = null;
+              refreshPage.disabled = false;
+              replaceBody(response, href);
+            }
+          });
     }
   };
 
@@ -169,7 +200,6 @@ var updateBody = function(event) {
 // the two most likely pages to be required.
 ?>
 var prefetch = function() {
-
   <?php
   // Don't pre-fetch if it's been disabled in the config
   if (empty($prefetch_refresh_rate))
@@ -178,20 +208,31 @@ var prefetch = function() {
     return;
     <?php
   }
-
-  // Don't pre-fetch and waste bandwidth if we're on a metered connection ?>
-  if (isMeteredConnection())
+  // Don't pre-fetch if we're in the process of moving to a different date (no point)
+  // or if we're on a metered connection (would waste bandwidth).
+  ?>
+  if (updateBody.lastRequest || isMeteredConnection())
   {
     return;
   }
 
+  var activeConnections = 0;
   var delay = <?php echo $prefetch_refresh_rate?> * 1000;
   var hrefs = [];
-  ['a.prev', 'a.next'].forEach(function(link) {
-      var href = $(link).attr('href');
-      if (typeof href !== 'undefined')
+
+  $('a.prefetch').each(function() {
+      var a = $(this);
+      <?php
+      // Don't waste time prefetching data for links that aren't visible, which
+      // they won't be if we are in kiosk mode.
+      ?>
+      if (a.is(':visible'))
       {
-        hrefs.push(href);
+        var href = a.attr('href');
+        if (typeof href !== 'undefined')
+        {
+          hrefs.push(href);
+        }
       }
     });
 
@@ -209,19 +250,26 @@ var prefetch = function() {
   }
 
   hrefs.forEach(function(href) {
-    $.get({
-        url: href,
-        dataType: 'html',
-        success: function(response) {
-            updateBody.prefetched[href] = response;
-            <?php // Once we've got all the responses back set off another timeout ?>
-            if (Object.keys(updateBody.prefetched).length === hrefs.length)
-            {
-              prefetch.timeoutId = setTimeout(prefetch, delay);
-            }
+    activeConnections++;
+    $.get({url: href, dataType: 'html'})
+      .fail(function() {
+          <?php // Don't do anything if the request failed ?>
+        })
+      .done(function(response) {
+          updateBody.prefetched[href] = response;
+          activeConnections--;
+          <?php // Once we've got all the responses back set off another timeout ?>
+          if (activeConnections === 0)
+          {
+            <?php
+            // Only set another timeout if all the requests were successful.  There's no
+            // point in doing so if one failed: it will probably fail again and just fill
+            // up the PHP error log.
+            ?>
+            prefetch.timeoutId = setTimeout(prefetch, delay);
           }
-      });
-  });
+        });
+    });
 
 };
 
@@ -263,6 +311,70 @@ $(document).on('page_ready', function() {
   // as we move between pages.
   ?>
   $('nav.arrow a, nav.view a').on('click', updateBody);
+
+
+  <?php
+  // In kiosk mode intercept all mouse and keyboard events as (a) we don't want to
+  // allow links to be clicked and (b) that's the way a user exits kiosk mode
+  ?>
+  if (args.kiosk)
+  {
+    <?php // We need to use a jQuery UI dialog because we can't time out a confirm box ?>
+    var dialog = $('<div id="dialog_exit_kiosk"></div>');
+    var timeout;
+
+    $(document.body).on('click keypress', function(e) {
+
+      function dialogClose() {
+        dialog.dialog('close');
+      }
+
+      e.preventDefault();
+
+      if (!dialog.dialog('instance'))
+      {
+        dialog.dialog({
+          buttons: [
+            {text: "<?php echo get_js_vocab('ok')?>",
+              click: function() {
+                var href = 'kiosk.php?kiosk=' + encodeURIComponent(args.kiosk);
+                href += '&area=' + encodeURIComponent(args.area);
+                href += '&room=' + encodeURIComponent(args.room);
+                if (args.site)
+                {
+                  href += '&site=' + encodeURIComponent(args.site);
+                }
+                $.redirect(href, {'csrf_token': getCSRFToken()});
+              }
+            },
+            {text: "<?php echo get_js_vocab('cancel')?>",
+              click: function() {
+                dialog.dialog('close');
+              }
+            }
+          ],
+          close: function(event, ui) {
+            <?php // Clear the timeout so that a dialog being reopened gets a new timeout ?>
+            clearTimeout(timeout);
+          },
+          closeText: "<?php echo get_js_vocab('close')?>",
+          modal: true,
+          open: function(event, ui){
+            timeout = setTimeout(dialogClose, <?php echo $kiosk_exit_dialog_timeout; ?> *1000);
+          },
+          title: "<?php echo get_js_vocab('exit_kiosk_mode_confirm')?>"
+        });
+      }
+      <?php // Don't open a dialog if the event came from one ?>
+      else if (!dialog.dialog('isOpen') && !$(e.target).parents('[role="dialog"]').length)
+      {
+        dialog.dialog('open');
+      }
+
+      return false;
+
+    });
+  }
 
   <?php
   // Pre-fetch some pages to improve performance

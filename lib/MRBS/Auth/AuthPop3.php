@@ -17,142 +17,143 @@ namespace MRBS\Auth;
  * $auth["admin"][] = "pop3user2";
  */
 
+use MRBS\Exception;
+
 class AuthPop3 extends Auth
 {
-  /* authValidateUser($user, $pass)
+  private const CONNECT_TIMEOUT = 15; // seconds
+  private const STREAM_TIMEOUT = 15; // seconds
+
+  private $hosts;
+  private $ports;
+
+
+  public function __construct()
+  {
+    global $pop3_host, $pop3_port;
+
+    // Build an array of hosts and ports from the config settings
+    $this->hosts = array();
+    $this->ports = array();
+
+    // Check that if there is an array of hosts and an array of ports
+    // then the number of each is the same
+    if (is_array($pop3_host) && is_array($pop3_port) &&
+        (count($pop3_port) != count($pop3_host)))
+    {
+      $message = "MRBS config error: number of POP3 hosts does not match number of POP3 ports.";
+      throw new Exception($message);
+    }
+
+    // Transfer the list of POP3 hosts to a new value to ensure that an array is always used.
+    // If a single value is passed then turn it into an array
+    $this->hosts = (is_array($pop3_host)) ? $pop3_host : array($pop3_host);
+
+    // Create an array of the port numbers to match the number of
+    // hosts if a single port number has been passed.
+    $this->ports = (is_array($pop3_port)) ? $pop3_port : array_pad($this->ports, count($this->hosts), $pop3_port);
+  }
+
+
+  /* validateUser($user, $pass)
    *
    * Checks if the specified username/password pair are valid
    *
-   * $user  - The user name
+   * $user  - The username
    * $pass  - The password
    *
    * Returns:
    *   false    - The pair are invalid or do not exist
    *   string   - The validated username
    */
-  public function validateUser($user, $pass)
+  public function validateUser(
+    #[\SensitiveParameter]
+    ?string $user,
+    #[\SensitiveParameter]
+    ?string $pass)
   {
-    global $pop3_host, $pop3_port;
-
-    $match = array();
-    $shared_secret = '';
-    $all_pop3_hosts = array();
-    $all_pop3_ports = array();
-
     // Check if we do not have a username/password
     if (!isset($user) || !isset($pass) || strlen($pass)==0)
     {
       return false;
     }
 
-    // Check that if there is an array of hosts and an array of ports
-    // then the number of each is the same
-    if (is_array($pop3_host) && is_array($pop3_port) &&
-        count($pop3_port) != count($pop3_host) )
-    {
-      return false;
-    }
-
-    // Transfer the list of pop3 hosts to an new value to ensure that
-    // an array is always used.
-    // If a single value is passed then turn it into an array
-    if (is_array($pop3_host))
-    {
-      $all_pop3_hosts = $pop3_host;
-    }
-    else
-    {
-      $all_pop3_hosts = array($pop3_host);
-    }
-
-    // create an array of the port numbers to match the number of
-    // hosts if a single port number has been passed.
-    if (is_array($pop3_port))
-    {
-      $all_pop3_ports = $pop3_port;
-    }
-    else
-    {
-      foreach ($all_pop3_hosts as $value)
-      {
-        $all_pop3_ports[] = $pop3_port;
-      }
-    }
-
     // iterate over all hosts and return if you get a successful login
-    foreach ($all_pop3_hosts as $idx => $host)
+    foreach ($this->hosts as $i => $host)
     {
-      $error_number = '';
-      $error_string = '';
-
+      $port = $this->ports[$i];
       // Connect to POP3 server
-      $stream = fsockopen( $host, $all_pop3_ports[$idx], $error_number,
-        $error_string, 15 );
-      $response = fgets( $stream, 1024 );
+      $stream = fsockopen($host, $port, $error_number, $error_string, self::CONNECT_TIMEOUT);
+      if ($stream === false)
+      {
+        continue;
+      }
 
-      // first we try to use APOP, and then if that fails we fall back to
+      stream_set_timeout($stream, self::STREAM_TIMEOUT);
+      $response = fgets($stream, 1024);
+      if ($response === false)
+      {
+        trigger_error("fgets() failed using host '$host' and port '$port'", E_USER_WARNING);
+        continue;
+      }
+
+      // First we try to use APOP, and then if that fails we fall back to
       // traditional stuff
 
-      // get the shared secret ( something on the greeting line that looks like <XXXX> )
-      if (preg_match( '/(<[^>]*>)/', $response, $match ))
+      // Get the shared secret ( something on the greeting line that looks like <XXXX> )
+      if (preg_match('/(<[^>]*>)/', $response, $match))
       {
         $shared_secret = $match[0];
       }
 
-      // if we have a shared secret then try APOP
-      if ($shared_secret)
+      // If we have a shared secret then try APOP
+      if (isset($shared_secret) && ($shared_secret !== ''))
       {
         $md5_token = md5("$shared_secret$pass");
+        $auth_string = "APOP $user $md5_token\r\n";
+        fputs($stream, $auth_string);
 
-        if ($stream)
-        {
-          $auth_string = "APOP $user $md5_token\r\n";
-          fputs( $stream, $auth_string );
-
-          // read the response. if it's an OK then we're authenticated
-          $response = fgets( $stream, 1024 );
-          if( substr( $response, 0, 3 ) == '+OK' )
-          {
-            fputs( $stream, "QUIT\r\n" );
-            return $user;
-          }
-        }
-      } // end shared secret if
-
-      // if we've still not authenticated then try using traditional methods
-      // need to reconnect if we tried APOP
-      if ($shared_secret)
-      {
-        $stream = fsockopen($host, $all_pop3_ports[$idx], $error_number,
-                            $error_string, 15);
+        // Read the response. If it's an OK then we're authenticated
         $response = fgets($stream, 1024);
+        if (str_starts_with($response, '+OK'))
+        {
+          fputs($stream, "QUIT\r\n");
+          return $user;
+        }
       }
 
-      // send standard POP3 USER and PASS commands
-      if ($stream)
+      // If we've still not authenticated then try using traditional methods.
+      // Need to reconnect if we tried APOP
+      $stream = fsockopen($host, $port, $error_number, $error_string, self::CONNECT_TIMEOUT);
+
+      if ($stream === false)
       {
-        fputs($stream, "USER $user\r\n");
-        $response = fgets($stream, 1024);
-        if(substr( $response, 0, 3 ) == '+OK')
-        {
-          fputs($stream, "PASS $pass\r\n");
-          $response = fgets( $stream, 1024 );
-          if ( substr( $response, 0, 3 ) == '+OK' )
-          {
-            return $user;
-          }
-        }
-        fputs($stream, "QUIT\r\n");
+        continue;
       }
+
+      stream_set_timeout($stream, self::STREAM_TIMEOUT);
+      // Send standard POP3 USER and PASS commands
+      fputs($stream, "USER $user\r\n");
+      $response = fgets($stream, 1024);
+      if (str_starts_with($response, '+OK'))
+      {
+        fputs($stream, "PASS $pass\r\n");
+        $response = fgets($stream, 1024);
+        if (str_starts_with($response, '+OK'))
+        {
+          return $user;
+        }
+      }
+      fputs($stream, "QUIT\r\n");
     }
 
-    // return failure
+    // Return failure
     return false;
   }
 
 
   // Checks whether validation of a user by email address is possible and allowed.
-  public function canValidateByEmail()
+  public function canValidateByEmail() : bool
   {
     return true;
   }

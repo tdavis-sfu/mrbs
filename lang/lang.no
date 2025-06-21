@@ -348,7 +348,7 @@ $vocab["delete_entries"]        = "Slette reservasjoner";
 $vocab["delete_entries_warning"] = "ADVARSEL! Dette vil slette alle reservasjoner som matcher søkestrengen." .
                                    "Denne operasjonen kan ikke angres. " .
                                    "Er du sikker på at du vil fortsette?\n\n" .
-                                   "Antall reservasjoner som slettes: ";
+                                   "Antall reservasjoner som slettes: %%s"; // The % sign is escaped because the string substitution is done by JavaScript
 $vocab["delete_entries_failed"] = "Reservasjonene kunne ikke slettes.";
 
 // Used in admin.php
@@ -374,7 +374,6 @@ $vocab["empty_name"]         = "Du har ikke skrevet et navn!";
 // Used in edit_area.php and/or edit_room.php
 $vocab["editarea"]           = "Endre område";
 $vocab["change"]             = "Endre";
-$vocab["backadmin"]          = "Tilbake til admin";
 $vocab["editroom"]           = "Endre rom";
 $vocab["viewroom"]           = "Se rom";
 $vocab["not_found"]          = " ble ikke funnet";
@@ -469,13 +468,12 @@ $vocab["db_schema_version"]       = "Database schema versjon";
 $vocab["db_local_schema_version"] = "Database local schema versjon";
 $vocab["config_details"]          = "Detaljer om konfigurasjon";
 $vocab["server_details"]          = "Detaljer om tjener";
-$vocab["database"]           = "Database: ";
-$vocab["system"]             = "System: ";
+$vocab["database"]           = "Database";
+$vocab["system"]             = "System";
 $vocab["servertime"]         = "Tjenertid";
-$vocab["server_software"]         = "Tjener-OS";
-$vocab["extensions"]              = "Utvidelser";
-$vocab["please_contact"]     = "Vennligst ta kontakt med ";
-$vocab["for_any_questions"]  = "for spørsmål som ikke er besvart her.";
+$vocab["server_software"]    = "Tjener-OS";
+$vocab["extensions"]         = "Utvidelser";
+$vocab["please_contact"]     = "Vennligst ta kontakt med %s for spørsmål som ikke er besvart her.";
 
 // Used in DataTables
 $vocab["import_icalendar"]            = "Importer en iCal-fil";
@@ -490,7 +488,7 @@ $vocab["import_bzip2"]                = "bzip2-filer";
 $vocab["file_name"]                   = "Fil";
 $vocab["import"]                      = "Importer";
 $vocab["upload_failed"]               = "Feil ved opplasting";
-$vocab["max_allowed_file_size"]       = "Maks tillat filstørrelse er";
+$vocab["max_allowed_file_size"]       = "Maks tillat filstørrelse er %s";
 $vocab["no_file"]                     = "Ingen fil ble lastet opp";
 $vocab["could_not_process"]           = "Feil ved importen: kunne ikke behandle filen";
 $vocab["badly_formed_ics"]            = "Feil i utforming av VCALENDAR-fil";

@@ -301,7 +301,7 @@ $vocab["delete_entries"]        = "Usuń wejścia";
 $vocab["delete_entries_warning"] = "UWAGA!  Spowoduje to usunięcie wszystkich dopasowanych wpisów " .
                                    "ciag wyszukiwania. Operacji nie można cofnąć. Jesteś " .
                                    "pewien że chcesz kontynuować?\n\n" .
-                                   "Całkowita usuniętych wejść: ";
+                                   "Całkowita usuniętych wejść: %%s"; // The % sign is escaped because the string substitution is done by JavaScript
 $vocab["delete_entries_failed"] = "Wejścia nie mogą być usunięte.";
 
 // Uzyte w admin.php
@@ -324,7 +324,6 @@ $vocab["empty_name"]         = "Nie podałeś nazwy!";
 // Uzyte w edit_area.php edit_room.php 
 $vocab["editarea"]           = "Edytuj Strefę";
 $vocab["change"]             = "Zmień";
-$vocab["backadmin"]          = "Powrót do Admin";
 $vocab["editroom"]           = "Edycja Pokoju";
 $vocab["viewroom"]                = "Zobacz pokój";
 $vocab["not_found"]          = " nie znaleziono";
@@ -411,8 +410,7 @@ $vocab["about_mrbs"]         = "Informacje o MRBS";
 $vocab["database"]           = "Baza Danch";
 $vocab["system"]             = "System";
 $vocab["servertime"]         = "Czas Serwera";
-$vocab["please_contact"]     = "Prosze o kontakt ";
-$vocab["for_any_questions"]  = "W sprawie pytań na które brak tu odpowiedzi.";
+$vocab["please_contact"]     = "Prosze o kontakt %s w sprawie pytań na które brak tu odpowiedzi.";
 
 // Used in DataTables
 $vocab["show_hide_columns"]  = "Pokaż / schowaj kolumny";

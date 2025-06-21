@@ -1,14 +1,15 @@
 <?php
+declare(strict_types=1);
 namespace MRBS;
 
-use MRBS\Form\Form;
 use MRBS\Form\ElementFieldset;
 use MRBS\Form\FieldInputPassword;
-use MRBS\Form\FieldInputText;
 use MRBS\Form\FieldInputSubmit;
+use MRBS\Form\FieldInputText;
+use MRBS\Form\Form;
 
 // This file checks to see whether the database schema versions (both global and local)
-// are up to date, and if not performs the necessary upgrades.
+// are up-to-date, and if not performs the necessary upgrades.
 
 // Sanity check:  check that we can access the MRBS tables.  If we can't, it's
 // either because they don't exist or we don't have permission.
@@ -52,7 +53,7 @@ if (($current_db_schema_version < DB::DB_SCHEMA_VERSION) ||
     }
     else
     {
-      $admin_handle = DBFactory::create($dbsys, $db_host, $db_admin_username, $db_admin_password, $db_database, 0, $db_port);
+      $admin_handle = DBFactory::create($dbsys, $db_host, $db_admin_username, $db_admin_password, $db_database, false, $db_port, $db_options);
     }
   }
 
@@ -138,7 +139,7 @@ function upgrade_echo($message)
 
 // Upgrade between database schema versions.
 // Returns FALSE on error, TRUE is successful
-function upgrade_database($local, $from, $to, DB $upgrade_handle)
+function upgrade_database(bool $local, int $from, int $to, DB $upgrade_handle) : bool
 {
   // $local is a boolean specifying whether the upgrades are global MRBS ones ($local === false)
   // or local upgrades ($local === true);
@@ -252,10 +253,9 @@ function db_get_userpass()
 {
   print_header();
 
-  $form = new Form();
+  $form = new Form(Form::METHOD_POST);
   $form->setAttributes(array('class'  => 'standard',
                              'id'     => 'db_logon',
-                             'method' => 'post',
                              'action' => multisite(this_page())));
 
   $fieldset = new ElementFieldset();

@@ -1,4 +1,5 @@
 <?php
+declare(strict_types=1);
 namespace MRBS;
 
 // Implements Ajax refreshing of the calendar view.   Only necessary, obviously,
@@ -8,16 +9,51 @@ require "../defaultincludes.inc";
 
 http_headers(array("Content-type: application/x-javascript"),
              60*30);  // 30 minute expiry
-
-if ($use_strict)
-{
-  echo "'use strict';\n";
-}
 ?>
+
+'use strict';
 
 var refreshListenerAdded = false;
 
 var intervalId;
+
+<?php
+// If the table container is scrollable, then scroll so that the current time is visible.
+?>
+function scrollToCurrentSlot() {
+  var table = $('.dwm_main');
+  var timelineVertical = table.find('thead').data('timeline-vertical');
+  var container = table.parent();
+  var scrollTo, scrollable;
+
+  scrollable = (timelineVertical) ? container.isHScrollable() : container.isVScrollable();
+
+  if (scrollable)
+  {
+    var slots = table.find('thead').data('slots');
+    var nowSlotIndices = Timeline.search(slots);
+    if (nowSlotIndices.length > 1)
+    {
+      <?php // Show the row/column just before the current slot ?>
+      var index = Math.max(0, nowSlotIndices[0] - 1);
+    }
+    if (index > 0) <?php // No point in scrolling to where we already are ?>
+    {
+      if (timelineVertical)
+      {
+        var cols = table.find('thead th:not(.first_last)');
+        scrollTo = cols.eq(index).offset().left - cols.eq(0).offset().left;
+        container.scrollLeft(scrollTo);
+      }
+      else
+      {
+        var rows = table.find('tbody tr');
+        scrollTo = rows.eq(index).offset().top - rows.eq(0).offset().top;
+        container.scrollTop(scrollTo);
+      }
+    }
+  }
+}
 
 <?php
 // Make the columns in the calendar views of equal size.   We can't use an inline style,
@@ -32,16 +68,27 @@ var sizeColumns = function() {
 
 
 var refreshPage = function refreshPage() {
+    var table = $('table.dwm_main');
+    <?php
+    // Allow refreshing if we're on a metered connection and in kiosk
+    // mode, because kiosk mode relies on regular refreshing.
+    ?>
     if (!isHidden() &&
-        !$('table.dwm_main').hasClass('resizing') &&
-        !isMeteredConnection())
+        !table.hasClass('resizing') &&
+        (args.kiosk || !isMeteredConnection()) &&
+        !refreshPage.disabled)
     {
-      var data = {refresh: 1,
-                  view: args.view,
-                  view_all: args.view_all,
-                  page_date: args.pageDate,
-                  area: args.area,
-                  room: args.room};
+      var url = 'index.php';
+
+      var data = {
+        refresh: 1,
+        view: args.view,
+        view_all: args.view_all,
+        page_date: args.pageDate,
+        area: args.area,
+        room: args.room
+      };
+
       if (args.timetohighlight !== undefined)
       {
         data.timetohighlight = args.timetohighlight;
@@ -57,15 +104,23 @@ var refreshPage = function refreshPage() {
       // class to the table we ensure that this can't happen, because if the user moves to a
       // different day the new HTML won't have the class.
       ?>
-      $('table.dwm_main').addClass('refreshable');
+      table.addClass('refreshable');
 
       if(args.site)
       {
         data.site = args.site;
       }
 
+      // If we're in kiosk mode add the kiosk parameter in the query string rather than as a POST
+      // parameter to avoid an unnecessary redirection by the server (the server checks for a kiosk
+      // in the query string and, if not found, will redirect to the kiosk URL).
+      if (args.kiosk !== undefined)
+      {
+        url += '?kiosk=' + args.kiosk;
+      }
+
       return $.post(
-          'index.php',
+           url,
            data,
            function(result){
                <?php
@@ -75,13 +130,14 @@ var refreshPage = function refreshPage() {
                // (4) trigger a load event so that the resizable bookings are
                // re-created and a new timer started.
                ?>
-               if ((result.length > 0) && !isHidden() && !refreshPage.disabled)
+               if (result && !isHidden() && !refreshPage.disabled)
                {
                  var table = $('table.dwm_main');
                  if (!table.hasClass('resizing') && table.hasClass('refreshable'))
                  {
-                   table.empty();
-                   table.html(result);
+                   var dateHeading = $('.date_heading');
+                   dateHeading.empty().html(result.date_heading);
+                   table.empty().html(result.inner_html);
                    window.clearInterval(intervalId);
                    intervalId = undefined;
                    table.trigger('tableload');
@@ -89,7 +145,7 @@ var refreshPage = function refreshPage() {
 
                }
              },
-           'html'
+           'json'
         );
     }  <?php // if (!isHidden() etc.?>
   };
@@ -154,11 +210,13 @@ var Timeline = {
   ?>
   getFirstNonZeroSlotSize: function() {
     var slotSize;
+    var table = $('#day_main');
+
     <?php
     if ($times_along_top)
     {
       ?>
-      $('#day_main').find('thead th').not('.first_last').each(function () {
+      table.find('thead th').not('.first_last').each(function () {
           slotSize = $(this).outerWidth();
           if (slotSize)
           {
@@ -170,7 +228,7 @@ var Timeline = {
     else
     {
       ?>
-      $('#day_main').find('tbody tr').each(function () {
+      table.find('tbody tr').each(function () {
           slotSize = $(this).outerHeight();
           if (slotSize)
           {
@@ -187,6 +245,7 @@ var Timeline = {
   // Searches for time within the slots array and returns the result as an array consisting of the
   // index of the time slot and, if there is one (ie if it's the week view), the index of the day.
   // If time isn't within any of the slots then returns an empty array.
+  // time defaults to the current time.
   ?>
   search: function(slots, time) {
     <?php
@@ -205,7 +264,7 @@ var Timeline = {
         return arr;
       }
 
-      <?php // Recursively gets the last element of a multi-dimensional array ?>
+      <?php // Recursively gets the last element of a multidimensional array ?>
       function getLast(arr)
       {
         if (Array.isArray(arr))
@@ -244,6 +303,11 @@ var Timeline = {
 
     var result = [];
 
+    if ((typeof time === 'undefined'))
+    {
+      time = Math.floor(Date.now() / 1000);
+    }
+
     <?php // Only look for an index if we know that the time is possibly within the slots somewhere ?>
     if ((typeof slots !== 'undefined') && within(slots, time))
     {
@@ -275,7 +339,7 @@ var Timeline = {
     var top, left, borderLeftWidth, borderRightWidth, width, height;
     var headers, headersFirstLast, headersNormal, headerFirstSize, headerLastSize;
 
-    nowSlotIndices = Timeline.search(slots, now);
+    nowSlotIndices = Timeline.search(slots);
 
     if (nowSlotIndices.length > 1)
     {
@@ -290,12 +354,12 @@ var Timeline = {
       <?php
       // We need the <th> header cells in <thead> because they are useful for working out the
       // dimensions of slots in the table.  We can't rely on the <td> cells in the <tbody> because
-      // they may have rowspans attached to the them.
+      // they may have rowspans attached to them.
       ?>
       headers = table.find('thead tr').first().find('th');
 
       <?php
-      // The time line can either be vertical or horizontal and stretch the full width/height of the
+      // The timeline can either be vertical or horizontal and stretch the full width/height
       // of the calendar or not. For example in the day view with $times_along_top = false the
       // timeline is horizontal and stretches the full width.   And in the week view for a single room
       // with $times_along_top = true the timeline is vertical and doesn't stretch the full height
@@ -306,8 +370,8 @@ var Timeline = {
         <?php // Get the row that contains the current time ?>
         row = table.find('tbody tr').eq(nowSlotIndices[1]);
         <?php
-        // Get the top, left edge and height of the timeline.  The left edge is the left edge of he cell,
-        // adjusted for the border width and then we add on the fraction that we are through the cell.
+        // Get the top, left edge and height of the timeline.  The left edge is the left edge of the cell,
+        // adjusted for the border width, and then we add on the fraction that we are through the cell.
         ?>
         element = headers.not('.first_last').eq(nowSlotIndices[0]);
         borderLeftWidth = parseInt(element.css('border-left-width'), 10);
@@ -327,7 +391,7 @@ var Timeline = {
           top = row.offset().top - table.parent().offset().top;
           <?php
           // Take 1px off the booking height to account for the bottom border of the <a> tag in a
-          // booked cell.  Bit of a hack, but difficult to see how to do it otherwise.
+          // booked cell. A bit of a hack, but difficult to see how to do it otherwise.
           ?>
           height = row.innerHeight() - 1;
         }
@@ -421,7 +485,7 @@ var Timeline = {
       {
         <?php // The delay is half the slot length in seconds divided by the slot width/height in pixels ?>
         delay = (slot[1] - slot[0])/(2 * slotSize);
-        delay = parseInt(delay * 1000, 10); <?php // Convert to milliseconds ?>
+        delay = Math.round(delay * 1000); <?php // Convert to milliseconds ?>
         delay = Math.max(delay, 1000);
       }
       <?php // If we still haven't got one, or else it's zero, then set a sensible default delay ?>
@@ -437,6 +501,7 @@ var Timeline = {
 
 $(document).on('page_ready', function() {
 
+  var table = $('table.dwm_main');
   Timeline.clear();
 
   <?php
@@ -445,22 +510,34 @@ $(document).on('page_ready', function() {
   // whole window.   For example if we've got the datepicker open we don't want that
   // to be reset.
   ?>
-  $('table.dwm_main').on('tableload', function() {
+  table.on('tableload', function() {
+
+      var refreshRate;
 
       sizeColumns();
 
-      <?php
-      if (!empty($refresh_rate))
+      if (args.kiosk)
       {
+        refreshRate = <?php echo $kiosk_refresh_rate ?? 0; ?>;
+      }
+      else
+      {
+        refreshRate = <?php echo $refresh_rate ?? 0; ?>;
+      }
+
+      if (refreshRate !== 0)
+      {
+
+        <?php
         // Set an interval timer to refresh the page, unless there's already one in place
         ?>
         if (typeof intervalId === 'undefined')
         {
-          intervalId = setInterval(refreshPage, <?php echo $refresh_rate * 1000 ?>);
+          intervalId = setInterval(refreshPage, refreshRate * 1000);
         }
-        <?php
       }
 
+      <?php
       // Add an event listener to detect a change in the visibility
       // state.  We can then suspend Ajax refreshing when the page is
       // hidden to save on server, client and network load.
@@ -478,15 +555,19 @@ $(document).on('page_ready', function() {
       }
 
       <?php
-      if ($show_timeline && !$enable_periods)
+      if (!$enable_periods)
       {
-        // Add a timeline showing the current time. Also need to recalculate the timeline if
-        // the window is resized.
+        // If required, add a timeline showing the current time. Also need to recalculate
+        //the timeline if the window is resized.
         ?>
-        Timeline.show();
-        $(window).on('resize', function () {
+        if ((args.kiosk && <?php echo ($show_timeline_kiosk) ? 'true' : 'false'?>) ||
+            (!args.kiosk && <?php echo($show_timeline) ? 'true' : 'false'?>))
+        {
+          Timeline.show();
+          $(window).on('resize', function () {
             Timeline.show();
           });
+        }
         <?php
       }
       ?>
@@ -502,7 +583,51 @@ $(document).on('page_ready', function() {
       var bottom = $('.dwm_main thead tr:first th:first').outerHeight();
       $('.dwm_main thead tr:nth-child(2) th').css('top', bottom + 'px');
 
+      <?php
+      // Highlight the column header cells in the table and foot.
+      // TODO: this only works when the mouse is moved; the highlighting is lost when the
+      // TODO: page is automatically refreshed.
+      ?>
+      $('table.all_rooms td').on('mouseenter mouseleave', function(event) {
+        $('table.all_rooms')
+          .find('thead, tfoot')
+          .find('th:nth-child(' + ($(this).index() + 1) + ')')
+          .toggleClass('highlight', (event.type === 'mouseenter'));
+      });
+
     }).trigger('tableload');
+
+  <?php
+  // If we've been given scroll positions in the URL query string, scroll to them so that we
+  // go back to the scroll position the user started with.  Otherwise, scroll so that the
+  // current timeslot is visible.
+  //
+  // Do this on page_ready, rather than tableload, so that the scrolling doesn't happen after
+  // every automatic refresh.  That would be a problem if the user has deliberately scrolled
+  // somewhere else after the automatic scroll.
+  //
+  // TODO: Make sure that the booking that has just been made is visible in the table and
+  // TODO: scroll as necessary if not.
+  ?>
+  const searchParams = new URLSearchParams(window.location.search);
+  const top = searchParams.get('top');
+  const left = searchParams.get('left');
+  if ((top == null) && (left === null))
+  {
+    scrollToCurrentSlot();
+  }
+  else
+  {
+    let tableContainer = table.parent();
+    if (top !== null)
+    {
+      tableContainer.scrollTop(top);
+    }
+    if (left !== null)
+    {
+      tableContainer.scrollLeft(left);
+    }
+  }
 
 });
 

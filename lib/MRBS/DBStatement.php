@@ -1,8 +1,9 @@
 <?php
-
+declare(strict_types=1);
 namespace MRBS;
 
 use PDO;
+use PDOStatement;
 
 
 //
@@ -12,7 +13,7 @@ class DBStatement
   protected $statement = null;
 
   //
-  public function __construct(DB $db_obj, \PDOStatement $sth)
+  public function __construct(DB $db_obj, PDOStatement $sth)
   {
     $this->db_object = $db_obj;
     $this->statement = $sth;
@@ -34,11 +35,11 @@ class DBStatement
   {
     return $this->statement->fetch(PDO::FETCH_ASSOC);
   }
-  
+
 
   // Return all the rows from a statement object, as an array of arrays
   // keyed on the column name
-  public function all_rows_keyed()
+  public function all_rows_keyed() : array
   {
     $result = array();
 
@@ -51,13 +52,13 @@ class DBStatement
   }
 
   // Return the number of rows returned by a statement from query().
-  public function count()
+  public function count() : int
   {
     return $this->statement->rowCount();
   }
 
   // Returns the number of fields in a statement.
-  public function num_fields()
+  public function num_fields() : int
   {
     return $this->statement->columnCount();
   }

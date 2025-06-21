@@ -1,8 +1,8 @@
 <?php
+declare(strict_types=1);
 namespace MRBS;
 
 use MRBS\Form\Form;
-
 
 // Deletes an entry, or a series.    The $id is always the id of
 // an individual entry.   If $series is set then the entire series
@@ -17,7 +17,7 @@ require_once "functions_mail.inc";
 
 // Get non-standard form variables
 $id = get_form_var('id', 'int', null, INPUT_POST);
-$series = get_form_var('series', 'int', null, INPUT_POST);
+$series = get_form_var('series', 'bool', null, INPUT_POST);
 $returl = get_form_var('returl', 'string', null, INPUT_POST);
 $action = get_form_var('action', 'string', null, INPUT_POST);
 $note = get_form_var('note', 'string', '', INPUT_POST);
@@ -53,9 +53,9 @@ if ($info = get_booking_info($id, FALSE, TRUE))
   }
   if ($authorised)
   {
-    $day   = strftime("%d", $info["start_time"]);
-    $month = strftime("%m", $info["start_time"]);
-    $year  = strftime("%Y", $info["start_time"]);
+    $day   = (int) date('d', $info['start_time']);
+    $month = (int) date('m', $info['start_time']);
+    $year  = (int) date('Y', $info['start_time']);
     $area  = mrbsGetRoomArea($info["room_id"]);
     // Get the settings for this area (they will be needed for policy checking)
     get_area_settings($area);
@@ -69,13 +69,13 @@ if ($info = get_booking_info($id, FALSE, TRUE))
       // If this is an individual entry of a series then force the entry_type
       // to be a changed entry, so that when we create the iCalendar object we know that
       // we only want to delete the individual entry
-      if (!$series && ($mail_previous['rep_type'] != REP_NONE))
+      if (!$series && ($mail_previous['repeat_rule']->getType() != RepeatRule::NONE))
       {
         $mail_previous['entry_type'] = ENTRY_RPT_CHANGED;
       }
     }
 
-    $start_times = mrbsDelEntry($id, $series, 1);
+    $start_times = mrbsDelEntry($id, $series, true);
 
     // [At the moment MRBS does not inform the user if it was not able to delete
     // an entry, or, for a series, some entries in a series.  This could happen for

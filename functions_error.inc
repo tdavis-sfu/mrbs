@@ -1,9 +1,59 @@
 <?php
+declare(strict_types=1);
 namespace MRBS;
+
+use Throwable;
+
+
+function init_errors() : void
+{
+  global $debug;
+
+  // If the error log file is a relative path then turn it into an absolute one in
+  // order to avoid problems in shutdown when the working directory can change.
+  // (See the notes in https://www.php.net/manual/en/function.register-shutdown-function.php).
+  // Check for both Windows and Unix style separators because Unix separators can be used
+  // on Windows.
+  $error_log = ini_get('error_log');
+  if (($error_log !== '') &&
+      (utf8_strpos($error_log, '/') === false) &&
+      (utf8_strpos($error_log, '\\') === false))
+  {
+    ini_set('error_log', getcwd() . '/' . $error_log);
+  }
+
+  // Make sure notice errors are not reported, they can break mrbs code:
+  $error_level = E_ALL & ~E_NOTICE & ~E_USER_NOTICE;
+
+  if (defined("E_DEPRECATED"))
+  {
+    $error_level = $error_level & ~E_DEPRECATED;
+  }
+
+  // The Mail and Net libraries generate E_STRICT errors, so disable E_STRICT (which became
+  // part of E_ALL in PHP 5.4)
+  if (defined("E_STRICT"))
+  {
+    $error_level = $error_level & ~E_STRICT;
+  }
+
+  if ($debug)
+  {
+    $error_level = -1;
+    ini_set('display_errors', '1');
+    ini_set('display_startup_errors', '1');  // ini_set() only accepts non-string values from PHP 8.1.0
+  }
+
+  error_reporting ($error_level);
+  set_error_handler(__NAMESPACE__ . "\\error_handler", $error_level);
+  set_exception_handler(__NAMESPACE__ . "\\exception_handler");
+
+  register_shutdown_function(__NAMESPACE__ . "\\shutdown_function");
+}
 
 
 // Translate an error constant value into the name of the constant
-function get_error_name($errno)
+function get_error_name(int $errno) : string
 {
   $constants = get_defined_constants(true);
   $keys = array_keys($constants['Core'], $errno);
@@ -15,13 +65,20 @@ function get_error_name($errno)
 
 
 // Replace leading spaces in $string with non-breaking spaces
-function replace_leading_spaces($string)
+function replace_leading_spaces(string $string) : string
 {
-  return preg_replace('/\G /', '&nbsp;', $string);
+  $pattern = '/\G /';
+  $result = preg_replace($pattern, '&nbsp;', $string);
+  if (!isset($result))
+  {
+    // This should not happen
+    throw new Exception("preg_replace() failed - probably because of an error in the pattern '$pattern'.");
+  }
+  return $result;
 }
 
 
-function to_html($string)
+function to_html(string $string) : string
 {
   $lines = explode("\n", $string);
   $lines = array_map(__NAMESPACE__ . "\\replace_leading_spaces", $lines);
@@ -29,7 +86,7 @@ function to_html($string)
 }
 
 
-function get_arg_string($args)
+function get_arg_string(array $args) : string
 {
   $result = array();
 
@@ -49,6 +106,11 @@ function get_arg_string($args)
         $result[] = $arg;
         break;
 
+      case 'object':
+        $class = get_class($arg);
+        $result[] = ($class == 'SensitiveParameterValue') ? "[$class]" : $type;
+        break;
+
       default:
         $result[] = $type;
         break;
@@ -61,7 +123,7 @@ function get_arg_string($args)
 
 // Generate a backtrace.  This function allows us to format the output slightly better
 // than debug_print_backtrace(), for example by replacing newlines with <br> tags.
-function generate_backtrace()
+function generate_backtrace() : string
 {
   global $debug;
 
@@ -109,7 +171,7 @@ function generate_backtrace()
 }
 
 
-function output_error($heading, $body, $show_data=false)
+function output_error(string $heading, string $body, bool $show_data=false) : void
 {
   global $debug, $auth, $get, $post;
 
@@ -123,6 +185,9 @@ function output_error($heading, $body, $show_data=false)
     $default_timezone_set = true;
   }
 
+  // TODO: Should we use the abstracted access to session variables through session()?
+  // TODO: Or does it not matter?  If it does, how do you find all the session variables in
+  // TODO: Joomla, for example?
   if ($show_data &&
       (isset($get) || isset($post) || isset($_SESSION)))
   {
@@ -173,14 +238,23 @@ function output_error($heading, $body, $show_data=false)
 }
 
 
-function error_handler($errno, $errstr, $errfile, $errline)
+// Converts an error into an exception
+function exception_thrower(int $errno, string $errstr)
+{
+  throw new \Exception($errstr, $errno);
+}
+
+
+// "If the function returns false then the normal error handler continues."
+// (https://www.php.net/manual/en/function.set-error-handler.php)
+function error_handler(int $errno, string $errstr, string $errfile, int $errline) : bool
 {
   // Check to see whether error reporting has been disabled by
   // the error suppression operator (@), because the custom error
   // handler is still called even if errors are suppressed.
   if (!(error_reporting() & $errno))
   {
-    return;
+    return true;
   }
 
   $heading = "\n" . get_error_name($errno) . " in $errfile at line $errline\n";
@@ -189,21 +263,31 @@ function error_handler($errno, $errstr, $errfile, $errline)
   $show_data = !in_array($errno, array(E_NOTICE, E_USER_NOTICE, E_USER_DEPRECATED));
 
   output_error($heading, $errstr, $show_data);
+
+  return true;
 }
 
 
-// As long as we are supporting PHP5 we cannot have a type declaration for $exception.
-// In PHP5 we could use \Exception and in PHP7 \Throwable, but if we are supporting
-// both then no type declaration is the only option.
-function exception_handler($exception)
+// Logs an exception (or sends it to the browser if $debug)
+function output_exception_error(Throwable $exception, bool $caught=false) : void
 {
   $class = get_class($exception);
 
-  $heading = "Uncaught exception '$class' in " . $exception->getFile() . " at line " . $exception->getLine() . "\n";
+  $heading = (($caught) ? "Caught" : "Uncaught") . " exception '$class' in " . $exception->getFile() . " at line " . $exception->getLine() . "\n";
   $body = $exception->getMessage() . "\n" .
           $exception->getTraceAsString() . "\n";
 
   output_error($heading, $body, true);
+}
+
+
+// Custom exception handler.  Logs the error and then outputs
+// a fatal error message
+function exception_handler(Throwable $exception) : void
+{
+  output_exception_error($exception);
+
+  $class = get_class($exception);
 
   switch ($class)
   {
@@ -224,7 +308,7 @@ function exception_handler($exception)
 // errors without sending incomplete HTML pages. This is only used for
 // errors which "should never happen", not those caused by bad inputs.
 // Always outputs the bottom of the page and exits.
-function fatal_error($message)
+function fatal_error(string $message) : void
 {
   print_simple_header();
   echo "<p>\n". htmlspecialchars($message) . "</p>\n";
@@ -233,7 +317,7 @@ function fatal_error($message)
 }
 
 
-function shutdown_function()
+function shutdown_function() : void
 {
   $error = error_get_last();
 
@@ -256,6 +340,6 @@ function shutdown_function()
             "enabling the iconv extension. Consult your PHP server documentation for " .
             "more information about enabling iconv support.\n";
 
-    output_error($heading, $body, false);
+    output_error($heading, $body);
   }
 }

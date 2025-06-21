@@ -1,7 +1,13 @@
 <?php
+declare(strict_types=1);
 namespace MRBS\Session;
 
-use \SimpleSAML_Auth_Simple;
+use MRBS\Form\Form;
+use MRBS\User;
+use SimpleSAML\Auth\Simple;
+use function MRBS\auth;
+use function MRBS\this_page;
+use function MRBS\url_base;
 
 
 /*
@@ -17,6 +23,8 @@ use \SimpleSAML_Auth_Simple;
  * $auth['saml']['authsource'] = 'default-sp';
  * $auth['saml']['attr']['username'] = 'sAMAccountName';
  * $auth['saml']['attr']['mail'] = 'mail';
+ * $auth['saml']['attr']['givenName'] = 'givenname';
+ * $auth['saml']['attr']['surname'] = 'sn'
  * $auth['saml']['admin']['memberOf'] = ['CN=Domain Admins,CN=Users,DC=example,DC=com'];
  *
  * This scheme assumes that you've already configured SimpleSamlPhp,
@@ -55,36 +63,44 @@ class SessionSaml extends SessionWithLogin
     require_once $auth['saml']['ssp_path'] . '/lib/_autoload.php';
 
     // Get the SimpleSamlPhp instance for the configured auth source
-    if (isset($auth['saml']['authsource']))
-    {
-      $authSource = $auth['saml']['authsource'];
-    }
-    else
-    {
-      $authSource = 'default-sp';
-    }
+    $authSource = $auth['saml']['authsource'] ?? 'default-sp';
 
-    $this->ssp = new SimpleSAML_Auth_Simple($authSource);
+    $this->ssp = new \SimpleSAML\Auth\Simple($authSource);
+    $this->samesite = self::SAMESITE_LAX;
     parent::__construct();
   }
 
 
+  public function init(int $lifetime) : void
+  {
+    global $auth;
+
+    if ($auth['saml']['disable_mrbs_session_init'])
+    {
+      // If we're using SAML then initialising sessions here can interfere with
+      // session handling in some SAML libraries
+      return;
+    }
+
+    parent::init($lifetime);
+  }
+
   // No need to prompt for a name - this is done by SimpleSamlPhp
-  public function authGet($target_url=null, $returl=null, $error=null, $raw=false)
+  public function authGet(?string $target_url=null, ?string $returl=null, ?string $error=null, bool $raw=false) : void
   {
     $this->ssp->requireAuth();
   }
 
 
-  public function getCurrentUser()
+  public function getCurrentUser() : ?User
   {
     $current_username = $this->getUsername();
 
-    return (isset($current_username)) ? \MRBS\auth()->getUser($current_username) : null;
+    return (isset($current_username)) ? auth()->getUser($current_username) : parent::getCurrentUser();
   }
 
 
-  public function getUsername()
+  public function getUsername() : ?string
   {
     global $auth;
 
@@ -100,16 +116,16 @@ class SessionSaml extends SessionWithLogin
   }
 
 
-  public function getLogonFormParams()
+  public function getLogonFormParams() : ?array
   {
-    $target_url = \MRBS\url_base() . \MRBS\this_page(true);
+    $target_url = url_base() . this_page(true);
     $url = $this->ssp->getLoginURL($target_url);
     $baseURL = strstr($url, '?', true);
     parse_str(substr(strstr($url, '?'), 1), $params);
 
     $result = array(
         'action' => $baseURL,
-        'method' => 'get'
+        'method' => Form::METHOD_GET
       );
 
     if (!empty($params))
@@ -121,16 +137,16 @@ class SessionSaml extends SessionWithLogin
   }
 
 
-  public function getLogoffFormParams()
+  public function getLogoffFormParams() : ?array
   {
-    $target_url = \MRBS\url_base() . \MRBS\this_page(true);
+    $target_url = url_base() . this_page(true);
     $url = $this->ssp->getLogoutURL($target_url);
     $baseURL = strstr($url, '?', true);
     parse_str(substr(strstr($url, '?'), 1), $params);
 
     $result = array(
         'action' => $baseURL,
-        'method' => 'get'
+        'method' => Form::METHOD_GET
       );
 
     if (!empty($params))
@@ -142,7 +158,7 @@ class SessionSaml extends SessionWithLogin
   }
 
 
-  public function processForm()
+  public function processForm() : void
   {
     // No need to do anything - all handled by SAML
   }

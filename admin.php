@@ -1,27 +1,28 @@
 <?php
+declare(strict_types=1);
 namespace MRBS;
 
-use MRBS\Form\Form;
 use MRBS\Form\ElementButton;
 use MRBS\Form\ElementFieldset;
 use MRBS\Form\ElementImg;
 use MRBS\Form\ElementInputImage;
+use MRBS\Form\ElementInputSubmit;
 use MRBS\Form\FieldInputEmail;
 use MRBS\Form\FieldInputNumber;
-use MRBS\Form\FieldInputText;
 use MRBS\Form\FieldInputSubmit;
+use MRBS\Form\FieldInputText;
 use MRBS\Form\FieldSelect;
+use MRBS\Form\Form;
 
 
 require "defaultincludes.inc";
 
 
-function generate_room_delete_form($room, $area)
+function generate_room_delete_form(int $room, int $area) : void
 {
-  $form = new Form();
+  $form = new Form(Form::METHOD_POST);
 
-  $attributes = array('action' => multisite('del.php'),
-                      'method' => 'post');
+  $attributes = array('action' => multisite('del.php'));
 
   $form->setAttributes($attributes);
 
@@ -45,15 +46,14 @@ function generate_room_delete_form($room, $area)
 }
 
 
-function generate_area_change_form($enabled_areas, $disabled_areas)
+function generate_area_change_form(array $enabled_areas, array $disabled_areas) : void
 {
   global $area, $day, $month, $year;
 
-  $form = new Form();
+  $form = new Form(Form::METHOD_POST);
 
   $attributes = array('class'  => 'areaChangeForm',
-                      'action' => multisite(this_page()),
-                      'method' => 'post');
+                      'action' => multisite(this_page()));
 
   $form->setAttributes($attributes);
 
@@ -124,14 +124,13 @@ function generate_area_change_form($enabled_areas, $disabled_areas)
 }
 
 
-function generate_new_area_form()
+function generate_new_area_form() : void
 {
-  $form = new Form();
+  $form = new Form(Form::METHOD_POST);
 
   $attributes = array('id'     => 'add_area',
                       'class'  => 'form_admin standard',
-                      'action' => multisite('add.php'),
-                      'method' => 'post');
+                      'action' => multisite('add.php'));
 
   $form->setAttributes($attributes);
 
@@ -163,16 +162,15 @@ function generate_new_area_form()
 }
 
 
-function generate_new_room_form()
+function generate_new_room_form() : void
 {
   global $area;
 
-  $form = new Form();
+  $form = new Form(Form::METHOD_POST);
 
   $attributes = array('id'     => 'add_room',
                       'class'  => 'form_admin standard',
-                      'action' => multisite('add.php'),
-                      'method' => 'post');
+                      'action' => multisite('add.php'));
 
   $form->setAttributes($attributes);
 
@@ -233,7 +231,7 @@ function generate_new_room_form()
 // Check the CSRF token.
 // Only check the token if the page is accessed via a POST request.  Therefore
 // this page should not take any action, but only display data.
-Form::checkToken($post_only=true);
+Form::checkToken(true);
 
 // Check the user is authorised for this page
 checkAuthorised(this_page());
@@ -250,8 +248,8 @@ $context = array(
     'year'      => $year,
     'month'     => $month,
     'day'       => $day,
-    'area'      => isset($area) ? $area : null,
-    'room'      => isset($room) ? $room : null
+    'area'      => $area ?? null,
+    'room'      => $room ?? null
   );
 
 print_header($context);
@@ -274,6 +272,45 @@ if (isset($area))
   }
 }
 
+// Add in the link for editing the message
+if (is_book_admin())
+{
+  echo "<h2>" . get_vocab("message") . "</h2>\n";
+  // Display the message, if any
+  $message = Message::getInstance();
+  $message->load();
+  if ($message->getText() !== '')
+  {
+    $from_string = $message->getFromLocalString();
+    $until_string = $message->getUntilLocalString();
+    if (empty($from_string))
+    {
+      $text = (empty($until_string)) ? get_vocab("this_message") : get_vocab("this_message_until", $until_string);
+    }
+    else
+    {
+      $text = (empty($until_string)) ? get_vocab("this_message_from", $from_string) : get_vocab("this_message_from_until", $from_string, $until_string);
+    }
+    echo '<p>' . htmlspecialchars($text) . "</p>\n";
+    echo '<p class="message_top">' . $message->getEscapedText() . "</p>\n";
+  }
+  else
+  {
+    echo '<p>' . htmlspecialchars(get_vocab("no_message")) . "</p>\n";
+  }
+  // Add an edit button
+  $url = 'edit_message.php?' . http_build_query($context,  '', '&');
+  $form = new Form(Form::METHOD_POST);
+  $form->setAttributes(array(
+      'id'     => 'edit_message',
+      'action' => multisite($url)
+    )
+  );
+  $submit = new ElementInputSubmit();
+  $submit->setAttribute('value', get_vocab('edit_message'));
+  $form->addElement($submit);
+  $form->render();
+}
 
 echo "<h2>" . get_vocab("administration") . "</h2>\n";
 if (!empty($error))
@@ -396,7 +433,7 @@ if (is_admin() || !empty($enabled_areas))
         echo "<thead>\n";
         echo "<tr>\n";
 
-        echo "<th>" . get_vocab("name") . "</th>\n";
+        echo '<th><span class="normal" data-type="string">' . get_vocab("name") . "</span></th>\n";
         if (is_admin())
         {
           // Don't show ordinary users the disabled status:  they are only going to see enabled rooms
@@ -412,10 +449,10 @@ if (is_admin() || !empty($enabled_areas))
             switch ($field['name'])
             {
               // the standard MRBS fields
-              case 'description':
               case 'capacity':
-              case 'room_admin_email':
+              case 'description':
               case 'invalid_types':
+              case 'room_admin_email':
                 $text = get_vocab($field['name']);
                 break;
               // any user defined fields
@@ -423,8 +460,14 @@ if (is_admin() || !empty($enabled_areas))
                 $text = get_loc_field_name(_tbl('room'), $field['name']);
                 break;
             }
-            // We don't use htmlspecialchars() here because the column names are
+            // Add a data-type to help JavaScript sort
+            if ($field['nature'] == 'character')
+            {
+              $text = '<span class="normal" data-type="string">' . $text . '</span>';
+            }
+            // We don't use htmlspecialchars() here because (a) the column names are
             // trusted and some of them may deliberately contain HTML entities (eg &nbsp;)
+            // (b) $text could contain the span above.
             echo "<th>$text</th>\n";
           }
         }
@@ -450,10 +493,9 @@ if (is_admin() || !empty($enabled_areas))
 
             $html_name = htmlspecialchars($r['room_name']);
             $href = multisite('edit_room.php?room=' . $r['id']);
-            // We insert an invisible span containing the sort key so that the rooms will
+            // We insert a data attribute containing the sort key so that the rooms will
             // be sorted properly
-            echo "<td><div>" .
-                 "<span>" . htmlspecialchars($r['sort_key']) . "</span>" .
+            echo '<td data-order="' . htmlspecialchars($r['sort_key']) . '"><div>' .
                  "<a title=\"$html_name\" href=\"" . htmlspecialchars($href) . "\">$html_name</a>" .
                  "</div></td>\n";
             if (is_admin())
@@ -470,10 +512,11 @@ if (is_admin() || !empty($enabled_areas))
                   // the standard MRBS fields
                   case 'description':
                   case 'room_admin_email':
-                    echo "<td><div>" . htmlspecialchars($r[$field['name']]) . "</div></td>\n";
+                    echo "<td><div>" . htmlspecialchars($r[$field['name']] ?? '') . "</div></td>\n";
                     break;
                   case 'capacity':
-                    echo "<td class=\"int\"><div>" . $r[$field['name']] . "</div></td>\n";
+                    $value = $r[$field['name']] ?? '';
+                    echo "<td class=\"int\"><div>" . htmlspecialchars((string) $value) . "</div></td>\n";
                     break;
                   case 'invalid_types':
                     echo "<td><div>" . get_type_names($r[$field['name']]) . "</div></td>\n";
@@ -491,12 +534,13 @@ if (is_admin() || !empty($enabled_areas))
                     elseif (($field['nature'] == 'integer') && isset($field['length']) && ($field['length'] > 2))
                     {
                       // integer values
-                      echo "<td class=\"int\"><div>" . $r[$field['name']] . "</div></td>\n";
+                      $value = $r[$field['name']] ?? '';
+                      echo "<td class=\"int\"><div>" . htmlspecialchars((string) $value) . "</div></td>\n";
                     }
                     else
                     {
                       // strings
-                      $value = $r[$field['name']];
+                      $value = $r[$field['name']] ?? '';
                       $html = "<td title=\"" . htmlspecialchars($value) . "\"><div>";
                       // Truncate before conversion, otherwise you could chop off in the middle of an entity
                       $html .= htmlspecialchars(utf8_substr($value, 0, $max_content_length));

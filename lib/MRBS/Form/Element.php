@@ -1,5 +1,5 @@
 <?php
-
+declare(strict_types=1);
 namespace MRBS\Form;
 
 // This is a limited implementation of the HTML5 DOM and is optimised for use by
@@ -16,20 +16,22 @@ namespace MRBS\Form;
 // If structures like these are required ten they can usually be achieved by wrapping the raw
 // text nodes in a <span>.
 
+use function MRBS\is_assoc;
+
 class Element
 {
-  private $tag = null;
-  private $self_closing = false;
+  private $tag;
+  private $self_closing;
   private $attributes = array();
   private $text = null;
   private $raw = false;
   private $text_at_start = false;
-  private $elements = array();
+  private $elements = [];
   private $next = null;
   private $prev = null;
 
 
-  public function __construct($tag, $self_closing=false)
+  public function __construct(string $tag, bool $self_closing=false)
   {
     $this->tag = $tag;
     $this->self_closing = $self_closing;
@@ -38,7 +40,7 @@ class Element
 
   // If $raw is true then the text will not be put through htmlspecialchars().  Only to
   // be used for trusted text.
-  public function setText($text, $text_at_start=false, $raw=false)
+  public function setText(string $text, bool $text_at_start=false, bool $raw=false) : Element
   {
     if ($this->self_closing)
     {
@@ -53,7 +55,7 @@ class Element
   }
 
 
-  public function getAttribute($name)
+  public function getAttribute(string $name)
   {
     return (isset($this->attributes[$name])) ? $this->attributes[$name] : null;
   }
@@ -61,14 +63,14 @@ class Element
 
   // A value of true allows for the setting of boolean attributes such as
   // 'required' and 'disabled'
-  public function setAttribute($name, $value=true)
+  public function setAttribute(string $name, $value=true) : Element
   {
     $this->attributes[$name] = $value;
     return $this;
   }
 
 
-  public function setAttributes(array $attributes)
+  public function setAttributes(array $attributes) : Element
   {
     foreach ($attributes as $name => $value)
     {
@@ -79,40 +81,40 @@ class Element
   }
 
 
-  public function removeAttribute($name)
+  public function removeAttribute(string $name) : Element
   {
     unset($this->attributes[$name]);
     return $this;
   }
 
 
-  public function getElement($key)
+  public function getElement(string $key) : Element
   {
     return $this->elements[$key];
   }
 
 
-  public function setElement($key, Element $element)
+  public function setElement(string $key, Element $element) : Element
   {
     $this->elements[$key] = $element;
     return $this;
   }
 
 
-  public function getElements()
+  public function getElements() : array
   {
     return $this->elements;
   }
 
 
-  public function setElements(array $elements)
+  public function setElements(array $elements) : Element
   {
     $this->elements = $elements;
     return $this;
   }
 
 
-  public function addElement(Element $element=null, $key=null)
+  public function addElement(?Element $element=null, ?string $key=null) : Element
   {
     if (isset($element))
     {
@@ -130,7 +132,7 @@ class Element
   }
 
 
-  public function addElements(array $elements)
+  public function addElements(array $elements) : Element
   {
     foreach ($elements as $element)
     {
@@ -140,14 +142,14 @@ class Element
   }
 
 
-  public function removeElement($key)
+  public function removeElement(string $key) : Element
   {
     unset($this->elements[$key]);
     return $this;
   }
 
 
-  public function next(Element $element=null)
+  public function next(?Element $element=null) : ?Element
   {
     if (isset($element))
     {
@@ -165,7 +167,7 @@ class Element
   }
 
 
-  public function prev(Element $element=null)
+  public function prev(?Element $element=null): ?Element
   {
     if (isset($element))
     {
@@ -183,13 +185,16 @@ class Element
   }
 
 
-  public function addClass($class)
+  public function addClass(string $class) : Element
   {
     $classes = $this->getAttribute('class');
 
     $classes = (isset($classes)) ? explode(' ', $classes) : array();
-    $classes[] = $class;
-    $this->setAttribute('class', implode(' ', $classes));
+    if (!in_array($class, $classes))
+    {
+      $classes[] = $class;
+      $this->setAttribute('class', implode(' ', $classes));
+    }
 
     return $this;
   }
@@ -209,7 +214,7 @@ class Element
   //                      true    treat as an associative array
   //                      false   treat as a simple array
   //                      null    auto-detect
-  public function addSelectOptions(array $options, $selected=null, $associative=null)
+  public function addSelectOptions(array $options, $selected=null, ?bool $associative=null) : Element
   {
     // Trivial case
     if (empty($options))
@@ -219,7 +224,7 @@ class Element
 
     if (!isset($associative))
     {
-      $associative = \MRBS\is_assoc($options);
+      $associative = is_assoc($options);
     }
 
     // It's possible to have multiple options selected
@@ -251,7 +256,7 @@ class Element
           $option->setAttribute('value', $key);
         }
 
-        $option->setText($value);
+        $option->setText(strval($value));
 
         if (!$associative)
         {
@@ -272,7 +277,7 @@ class Element
 
 
   // $checked is either a scalar or an array of keys that are checked
-  public function addCheckboxOptions(array $options, $name, $checked=null, $associative=null, $disabled=false)
+  public function addCheckboxOptions(array $options, string $name, $checked=null, $associative=null, bool $disabled=false): Element
   {
     // Trivial case
     if (empty($options))
@@ -287,7 +292,7 @@ class Element
 
     if (!isset($associative))
     {
-      $associative = \MRBS\is_assoc($options);
+      $associative = is_assoc($options);
     }
 
     foreach ($options as $key => $value)
@@ -310,7 +315,7 @@ class Element
       }
 
       $label = new ElementLabel();
-      $label->setText($value)
+      $label->setText(strval($value))
             ->addElement($checkbox);
 
       $this->addElement($label);
@@ -320,7 +325,7 @@ class Element
   }
 
 
-  public function addRadioOptions(array $options, $name, $checked=null, $associative=null, $disabled=false)
+  public function addRadioOptions(array $options, string $name, $checked=null, $associative=null, bool $disabled=false): Element
   {
     // Trivial case
     if (empty($options))
@@ -330,7 +335,7 @@ class Element
 
     if (!isset($associative))
     {
-      $associative = \MRBS\is_assoc($options);
+      $associative = is_assoc($options);
     }
 
     foreach ($options as $key => $value)
@@ -348,7 +353,7 @@ class Element
         $radio->setAttribute('checked');
       }
       $label = new ElementLabel();
-      $label->setText($value)
+      $label->setText(strval($value))
             ->addElement($radio);
 
       $this->addElement($label);
@@ -358,7 +363,7 @@ class Element
   }
 
 
-  public function render()
+  public function render() : void
   {
     echo $this->toHTML();
   }
@@ -369,7 +374,7 @@ class Element
   // closing tags.   This is useful for structures such as
   // <label><input>text</label> where whitespace after the <input> tag would
   // affect what the browser displays on the screen.
-  public function toHTML($no_whitespace=false)
+  public function toHTML(bool $no_whitespace=false): string
   {
     $html = "";
 
@@ -394,10 +399,20 @@ class Element
       }
 
       $html .= " $key";
-      if (isset($value) && ($value !== true))
+      if ($value !== true)
       {
         // boolean attributes, eg 'required', don't need a value
-        $html .= '="' . htmlspecialchars($value) . '"';
+        $html .= '="';
+        if (is_numeric($value))
+        {
+          // No need to escape these
+          $html .= $value;
+        }
+        else
+        {
+          $html .= htmlspecialchars($value);
+        }
+        $html .= '"';
       }
     }
 
@@ -446,9 +461,14 @@ class Element
   }
 
 
-  private static function escapeText($text, $raw=false)
+  private static function escapeText($text, bool $raw=false)
   {
-    return ($raw) ? $text : htmlspecialchars($text);
+    if ($raw || is_numeric($text))
+    {
+      return $text;
+    }
+
+    return htmlspecialchars($text);
   }
 
 }

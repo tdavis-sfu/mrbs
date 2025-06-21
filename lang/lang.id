@@ -319,7 +319,7 @@ $vocab["delete_entries"]        = "Hapus entri";
 $vocab["delete_entries_warning"] = "PERHATIAN!  Aksi berikut akan menghapus entri yg cocok " .
                                    "sesuai kata kunci yg anda masukkan. Data terhapus tidak dapat dikembalikan lagi. Apakah " .
                                    "anda yakin melanjutkan?\n\n" .
-                                   "Jumlah entri yang akan dihapus: ";
+                                   "Jumlah entri yang akan dihapus: %%s"; // The % sign is escaped because the string substitution is done by JavaScript
 $vocab["delete_entries_failed"] = "Entri tidak dapat dihapus.";
 
 // Used in admin.php
@@ -344,7 +344,6 @@ $vocab["empty_name"]         = "Anda belum memasukkan anam!";
 // Used in edit_area.php and/or edit_room.php
 $vocab["editarea"]                = "Ubah Area";
 $vocab["change"]                  = "Ubah";
-$vocab["backadmin"]               = "Kembali ke ruangan";
 $vocab["editroom"]                = "Ubah Ruangan";
 $vocab["viewroom"]                = "Lihat Ruangan";
 $vocab["not_found"]               = " tidak ditemukan";
@@ -426,8 +425,7 @@ $vocab["about_mrbs"]         = "Tentang Sistem";
 $vocab["database"]           = "Database";
 $vocab["system"]             = "Sistem";
 $vocab["servertime"]         = "Waktu server";
-$vocab["please_contact"]     = "Silahkan hubungi ";
-$vocab["for_any_questions"]  = "Untuk setiap pertanyaan yg belum terjawab disini.";
+$vocab["please_contact"]     = "Silahkan hubungi %s Untuk setiap pertanyaan yg belum terjawab disini.";
 
 // Used in import.php
 $vocab["import_icalendar"]            = "Import berkas kalender iCal";
@@ -440,7 +438,7 @@ $vocab["import_intro"]                = "Anda bisa mengimpor berkas iCalendar RF
 $vocab["file_name"]                   = "Berkas";
 $vocab["import"]                      = "Import";
 $vocab["upload_failed"]               = "Proses Upload Gagal";
-$vocab["max_allowed_file_size"]       = "Ukuran maksimum diperbolehkan adalah";
+$vocab["max_allowed_file_size"]       = "Ukuran maksimum diperbolehkan adalah %s";
 $vocab["no_file"]                     = "Tidak ada berkas yang diunggal";
 $vocab["badly_formed_ics"]            = "Berkas VCALENDAR tidak terformat dengan baik";
 $vocab["area_room_order"]             = "Urutan";

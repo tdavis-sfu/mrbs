@@ -17,4 +17,3 @@ define('JPATH_BASE', $joomla_path);
 
 require_once JPATH_BASE . '/includes/defines.php';
 require_once JPATH_BASE . '/includes/framework.php';
-

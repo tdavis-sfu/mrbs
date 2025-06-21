@@ -1,13 +1,13 @@
 <?php
+declare(strict_types = 1);
 namespace MRBS\Auth;
 
 use MRBS\DBFactory;
 use MRBS\User;
+use ValueError;
 
 class AuthDbExt extends Auth
 {
-  protected $db_ext_conn;
-
   protected $db_table;
   protected $password_format;
   protected $column_name_username;
@@ -20,25 +20,6 @@ class AuthDbExt extends Auth
   {
     global $auth;
 
-    if (empty($auth['db_ext']['db_system']))
-    {
-      $auth['db_ext']['db_system'] = 'mysql';
-    }
-
-    // Establish a connection
-    $persist = 0;
-    $port = isset($auth['db_ext']['db_port']) ? (int)$auth['db_ext']['db_port'] : null;
-
-    $this->db_ext_conn = DBFactory::create(
-        $auth['db_ext']['db_system'],
-        $auth['db_ext']['db_host'],
-        $auth['db_ext']['db_username'],
-        $auth['db_ext']['db_password'],
-        $auth['db_ext']['db_name'],
-        $persist,
-        $port
-      );
-
     // Take our own copies of the settings
     $vars = array(
         'db_table',
@@ -47,13 +28,12 @@ class AuthDbExt extends Auth
         'column_name_display_name',
         'column_name_password',
         'column_name_email',
-        'column_name_level',
-        'use_md5_passwords'
+        'column_name_level'
       );
 
     foreach ($vars as $var)
     {
-      $this->$var = (isset($auth['db_ext'][$var])) ? $auth['db_ext'][$var] : null;
+      $this->$var = $auth['db_ext'][$var] ?? null;
     }
 
     // Backwards compatibility setting
@@ -64,7 +44,7 @@ class AuthDbExt extends Auth
   }
 
 
-  /* authValidateUser($user, $pass)
+  /* validateUser($user, $pass)
    *
    * Checks if the specified username/password pair are valid
    *
@@ -75,95 +55,89 @@ class AuthDbExt extends Auth
    *   false    - The pair are invalid or do not exist
    *   string   - The validated username
    */
-  public function validateUser($user, $pass)
+  public function validateUser(
+    #[\SensitiveParameter]
+    ?string $user,
+    #[\SensitiveParameter]
+    ?string $pass)
   {
-    $retval = false;
-
     // syntax_casesensitive_equals() modifies our SQL params array for us.   We need an exact match -
     // MySQL allows trailing spaces when using an '=' comparison, eg 'john' = 'john '
 
     $sql_params = array();
 
-    $query = "SELECT " . $this->db_ext_conn->quote($this->column_name_password) .
-             "FROM " . $this->db_ext_conn->quote($this->db_table) .
-             "WHERE " . $this->db_ext_conn->syntax_casesensitive_equals($this->column_name_username,
-                                                                        $user,
-                                                                        $sql_params);
+    $query = "SELECT " . $this->connection()->quote($this->column_name_password) .
+               "FROM " . $this->connection()->quote($this->db_table) .
+              "WHERE " . $this->connection()->syntax_casesensitive_equals($this->column_name_username,
+                                                                          $user,
+                                                                          $sql_params);
 
-    $stmt = $this->db_ext_conn->query($query, $sql_params);
+    $stmt = $this->connection()->query($query, $sql_params);
 
-    if ($stmt->count() == 1) // force a unique match
-    {
-      $row = $stmt->next_row();
-
-      switch ($this->password_format)
-      {
-        case 'md5':
-          if (md5($pass) == $row[0])
-          {
-            $retval = $user;
-          }
-          break;
-
-        case 'sha1':
-          if (sha1($pass) == $row[0])
-          {
-            $retval = $user;
-          }
-          break;
-
-        case 'sha256':
-          if (hash('sha256', $pass) == $row[0])
-          {
-            $retval = $user;
-          }
-          break;
-
-        case 'crypt':
-          $recrypt = crypt($pass,$row[0]);
-          if ($row[0] == $recrypt)
-          {
-            $retval = $user;
-          }
-          break;
-
-        case 'password_hash':
-          if (password_verify($pass, $row[0]))
-          {
-            // Should we call password_needs_rehash() ?
-            // Probably not as we may not have UPDATE rights on the external database.
-            $retval = $user;
-          }
-          break;
-
-        default:
-          // Otherwise assume plaintext
-          if ($pass == $row[0])
-          {
-            $retval = $user;
-          }
-          break;
-      }
-    }
-
-    return $retval;
+    // Check whether (a) there's just one result and (b) that password matches
+    return (($stmt->count() === 1) && $this->password_check($pass, $stmt->next_row()[0])) ? $user : false;
   }
 
 
-  public function getUser($username)
+  // Checks that a password matches a hash
+  protected function password_check(string $password, string $hash) : bool
   {
-    global $auth;
+    switch ($this->password_format)
+    {
+      case 'crypt':
+      case 'password_hash':
+        // Don't call password_needs_rehash() as (a) we may not have UPDATE rights on the external
+        // database and (b) whether the password needs to be updated will depend on the PHP version
+        // on the external system, not this one.
+        return (password_verify($password, $hash));
+        break;
+      case 'plaintext':
+        return hash_equals($hash, $password);
+        break;
+      default:
+        // Check we've got a valid hashing algorithm.  From PHP 8.0.0 hash() will do this.
+        if ((version_compare(PHP_VERSION, '8.0.0') < 0) &&
+            !in_array($this->password_format, hash_algos()))
+        {
+          throw new ValueError("'$this->password_format' is not a valid hashing algorithm");
+        }
+        return hash_equals($hash, hash($this->password_format, $password));
+        break;
+    }
+  }
 
+
+  protected function getUserFresh(string $username) : ?User
+  {
     $sql_params = array();
 
-    $sql = "SELECT *
-            FROM " . $this->db_ext_conn->quote($this->db_table) . "
-            WHERE " . $this->db_ext_conn->syntax_casesensitive_equals($this->column_name_username,
-                                                                      $username,
-                                                                      $sql_params) . "
-            LIMIT 1";
+    // Only retrieve the columns we need (a) to minimise the query and (b) to avoid
+    // sending unnecessary information unencrypted over the internet (Remote SQL is
+    // usually unencrypted).
+    $columns = array();
 
-    $stmt = $this->db_ext_conn->query($sql, $sql_params);
+    $properties = array(
+        'column_name_display_name',
+        'column_name_email',
+        'column_name_level'
+      );
+
+    foreach ($properties as $property)
+    {
+      if (isset($this->$property))
+      {
+        $columns[] = $this->$property;
+      }
+    }
+
+    $sql = "SELECT " . implode(', ', array_map(array($this->connection(), 'quote'), $columns)) . "
+              FROM " . $this->connection()->quote($this->db_table) . "
+             WHERE " . $this->connection()->syntax_casesensitive_equals($this->column_name_username,
+                                                                       $username,
+                                                                       $sql_params) . "
+             LIMIT 1";
+
+    $stmt = $this->connection()->query($sql, $sql_params);
 
     // The username doesn't exist - return NULL
     if ($stmt->count() === 0)
@@ -189,18 +163,12 @@ class AuthDbExt extends Auth
     }
 
     // Set the level
-    // First check whether the user is an admin from the config file
-    foreach ($auth['admin'] as $admin)
-    {
-      if(strcasecmp($username, $admin) === 0)
-      {
-        $user->level = 2;
-        break;
-      }
-    }
+    // First get the default level.  Any admins defined in the config
+    // file override settings in the external database.
+    $user->level = $this->getDefaultLevel($username);
 
-    // If not, check the data from the external db
-    if ($user->level != 2)
+    // Then if they are not an admin get their level from the external db
+    if ($user->level < 2)
     {
       // If there's can entry in the db, then use that
       if (isset($this->column_name_level) &&
@@ -209,16 +177,14 @@ class AuthDbExt extends Auth
       {
         $user->level = $data[$this->column_name_level];
       }
-      // Otherwise they're level 1
-      else
-      {
-        $user->level = 1;
-      }
     }
 
     // Then set the remaining properties. (We don't set all the properties from
     // $data initially because we want to preserve the default values if we don't
     // have data for the four important properties.)
+    // (Note that normally there won't be any extra properties because we have
+    // specified above the columns that we want, but this code is here so that extra
+    // columns can be added if required.)
     foreach ($data as $key => $value)
     {
       if (!property_exists($user, $key))
@@ -232,7 +198,7 @@ class AuthDbExt extends Auth
 
 
   // Return an array of users, indexed by 'username' and 'display_name'
-  public function getUsernames()
+  public function getUsernames() : array
   {
     if (isset($this->column_name_display_name) && ($this->column_name_display_name !== ''))
     {
@@ -243,12 +209,51 @@ class AuthDbExt extends Auth
       $display_name_column = $this->column_name_username;
     }
 
-    $sql = "SELECT " . $this->db_ext_conn->quote($this->column_name_username) . " AS username, ".
-                       $this->db_ext_conn->quote($display_name_column) . " AS display_name
-            FROM " . $this->db_ext_conn->quote($this->db_table) . " ORDER BY display_name";
+    $sql = "SELECT " . $this->connection()->quote($this->column_name_username) . " AS username, ".
+                       $this->connection()->quote($display_name_column) . " AS display_name
+              FROM " . $this->connection()->quote($this->db_table) . " ORDER BY display_name";
 
-    $stmt = $this->db_ext_conn->query($sql);
+    $res = $this->connection()->query($sql);
 
-    return $stmt->all_rows_keyed();
+    $users =  $res->all_rows_keyed();
+    self::sortUsers($users);
+
+    return $users;
+  }
+
+
+  // Returns a database connection
+  // The connection isn't established in the constructor, but here only when it's really
+  // needed as it can be expensive establishing a remote connection.  For example
+  // method_exists(auth(), 'method') will end up calling the constructor, but a connection
+  // isn't needed just for method_exists().
+  protected function connection()
+  {
+    global $auth;
+
+    static $connection = null;
+
+    if (!isset($connection))
+    {
+      if (empty($auth['db_ext']['db_system']))
+      {
+        $auth['db_ext']['db_system'] = 'mysql';
+      }
+
+      // Establish a connection
+      $port = isset($auth['db_ext']['db_port']) ? (int) $auth['db_ext']['db_port'] : null;
+
+      $connection = DBFactory::create(
+          $auth['db_ext']['db_system'],
+          $auth['db_ext']['db_host'],
+          $auth['db_ext']['db_username'],
+          $auth['db_ext']['db_password'],
+          $auth['db_ext']['db_name'],
+          false,
+          $port
+        );
+    }
+
+    return $connection;
   }
 }

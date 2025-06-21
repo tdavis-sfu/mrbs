@@ -48,6 +48,14 @@ $vocab["create_new_booking"] = "Create a new booking";
 $vocab["select_area"]        = "Select area";
 $vocab["select_room"]        = "Select room";
 $vocab["all"]                = "<all>";
+$vocab["registration_level_limited"]              = ' [%1$d/%2$d]';
+$vocab["registration_level_limited_with_names"]   = ' [%1$d/%2$d: %3$s]';
+$vocab["registration_level_unlimited"]            = ' [%1$d]';
+$vocab["registration_level_unlimited_with_names"] = ' [%1$d: %2$s]';
+$vocab["exit_kiosk_mode_confirm"]    = "Exit kiosk mode?";
+$vocab["close"]              = "Close";
+$vocab["ok"]                 = "OK";
+$vocab["cancel"]             = "Cancel";
 
 // Used in trailer.inc
 $vocab["viewday"]            = "View Day";
@@ -70,6 +78,7 @@ $vocab["start_date"]         = "Start time";
 $vocab["end_date"]           = "End time";
 $vocab["time"]               = "Time";
 $vocab["period"]             = "Period";
+$vocab["unknown_period"]     = "<Period %d>";
 $vocab["duration"]           = "Duration";
 $vocab["second_lc"]          = "second";
 $vocab["seconds"]            = "seconds";
@@ -139,6 +148,7 @@ $vocab["invalid_rep_interval"]     = "The repeat interval must be greater than z
 $vocab["confirm_rep_end_date"]     = "It looks like you may have forgotten to set the repeat " .
                                      "end date. Do you want to continue anyway?";
 $vocab["type_reserved_for_admins"] = "The type '%s' is reserved for administrators";
+$vocab["multiroom_not_allowed"]    = "You are not allowed to make a booking for multiple rooms.";
 $vocab["edit_entry_nonexistent_room"] = "You are trying to create or edit an entry for a room " .
                                         "that doesn't exist.  This might be because you are using " .
                                         "a bookmark that is no longer valid. It is not generally " .
@@ -159,9 +169,11 @@ $vocab["deleteseries"]            = "Delete Series";
 $vocab["exportentry"]             = "Export Entry";
 $vocab["exportseries"]            = "Export Series";
 $vocab["confirmdel"]              = "Are you sure you want to delete this entry?";
-$vocab["confirm_edit_series"]     = "Users have registered for one or more events in this series and " .
-                                    "editing the series will cause their names to be lost.  Are you sure " .
-                                    "you want to continue?";
+$vocab["confirmdel_series"]       = "Are you sure you want to delete this series?";
+$vocab["confirm_edit_series"]     = "WARNING! Users have registered for one or more events in this series and " .
+                                    "editing the series will cause their names to be lost.  If you want " .
+                                    "to keep their names then you should edit the series one entry at a " .
+                                    "time using 'Edit Entry'.  Are you sure you want to continue?";
 $vocab["returnprev"]              = "Return to previous page";
 $vocab["invalid_entry_id"]        = "Invalid entry id.";
 $vocab["invalid_series_id"]       = "Invalid series id.";
@@ -235,8 +247,11 @@ $vocab["old_value"]               = "Old";
 $vocab["reason"]                  = "Reason";
 $vocab["info_requested"]          = "Information requested";
 $vocab["cannot_change_approved_bookings"] = "Bookings that have been approved cannot be edited or deleted";
-$vocab["no_simultaneous_bookings"]        = "You cannot have bookings for two different rooms at the same time";
+$vocab["no_simultaneous_bookings"]        = "You cannot have bookings for more than %s room(s) at the same time";
+$vocab["no_bookings_on_holidays"] = "You have tried to make a booking on a holiday (%s)";
+$vocab["no_bookings_on_weekends"] = "You have tried to make a booking on a weekend day (%s)";
 $vocab["type_not_allowed"]        = 'Bookings of type %1$s are not allowed in %2$s';
+$vocab["type_not_allowed_day"]    = 'Bookings of type %1$s are not allowed on %2$ss';
 $vocab["min_create_time_before"]  = 'You cannot create a booking which starts in less than %1$d %2$s';
 $vocab["max_create_time_before"]  = 'You cannot create a booking which ends in more than %1$d %2$s';
 $vocab["max_create_time_before_start"]  = 'You cannot create a booking which starts in more than %1$d %2$s';
@@ -269,6 +284,22 @@ $vocab["max_secs_per_future_area"]    = 'The maximum total length of outstanding
 $vocab["skip_and_book"]           = "Skip and book";
 $vocab["skip_and_book_note"]      = "Carry on with the booking, skipping past the conflicting entries";
 
+// Used in edit_message.php
+$vocab["edit_message"]  = "Edit message";
+$vocab["message"]       = "Message";
+$vocab["display_from"]  = "Display from the start of";
+$vocab["display_until"] = "Display until the end of";
+
+// Used in kiosk.php
+$vocab["enter"]                     = "Enter";
+$vocab["exit"]                      = "Exit";
+$vocab["enter_kiosk_intro"]         = "Set a password which will be needed to exit kiosk mode.";
+$vocab["exit_kiosk_intro"]          = "Enter the password you set when you entered kiosk mode.";
+$vocab["enter_kiosk_mode"]          = "Enter Kiosk Mode";
+$vocab["exit_kiosk_mode"]           = "Exit Kiosk Mode";
+$vocab["kiosk"]                     = "Kiosk";
+$vocab["kiosk_password"]            = "Kiosk password";
+
 // Used in pending.php
 $vocab["pending"]            = "Bookings awaiting approval";
 $vocab["none_outstanding"]   = "You have no bookings awaiting approval.";
@@ -297,10 +328,12 @@ $vocab["password_reset_body"]       = 'Someone has generated a password reset re
                                       'The link will expire in %1$d %2$s.';
 $vocab["enter_username"]            = "Please enter your username here.";
 $vocab["enter_username_or_email"]   = "Please enter your username or email address here.";
-$vocab["will_be_sent_instructions"] = "You will be sent an email message with instructions on how to reset your password.";
+$vocab["will_be_sent_instructions"] = "You will be sent an email message with instructions on how to reset your password. " .
+                                      "If you don't have an email address you will need to contact your administrator.";
 $vocab["reset_password"]            = "Reset password";
 $vocab["pwd_check_email"]           = "Thank you.  If there's a user account corresponding to those details then you " .
-                                      "will shortly receive an email with instructions for resetting your password.";
+                                      "will shortly receive an email with instructions for resetting your password. " .
+                                      "Don't forget to check your spam/junk folder if it doesn't arrive.";
 $vocab["invalid_link"]              = "Invalid link";
 $vocab["pwd_request_failed"]        = "An email could not be sent to this user.";
 $vocab["link_invalid"]              = "The password reset link is invalid or has expired.";
@@ -359,6 +392,7 @@ $vocab["copy_email_addresses"]  = "Copy email addresses";
 // Used in search.php
 $vocab["invalid_search"]     = "Empty or invalid search string.";
 $vocab["search_results"]     = 'Search results for \'%1$s\' from %2$s';
+$vocab["search_results_unlimited"] = "Search results for '%s'";
 $vocab["nothing_found"]      = "No matching entries found.";
 $vocab["records"]            = "Records ";
 $vocab["through"]            = " through ";
@@ -369,6 +403,7 @@ $vocab["entry"]              = "Entry";
 $vocab["search_button"]      = "Search";
 $vocab["search_for"]         = "Search for";
 $vocab["from"]               = "From";
+$vocab["export_as_ics"]      = ".ics";
 
 // Used in report.php
 $vocab["report_on"]             = "Report on Meetings";
@@ -411,12 +446,26 @@ $vocab["search_criteria"]       = "Search criteria";
 $vocab["presentation_options"]  = "Output options";
 $vocab["delete_entries"]        = "Delete entries";
 $vocab["delete_entries_warning"] = "WARNING!  This will delete all the entries matching " .
-                                   "the search string.  The operation cannot be undone.  Are " .
+                                   "the search criteria.  The operation cannot be undone.  Are " .
                                    "you sure you want to continue?\n\n" .
-                                   "Total number of entries that will be deleted: ";
+                                   "Total number of entries that will be deleted: %%s"; // The % sign is escaped because the string substitution is done by JavaScript
+$vocab["deleting_n_entries"]    = "Deleting %%d entries ..."; // The % sign is escaped because the number substitution is done by JavaScript
 $vocab["delete_entries_failed"] = "The entries could not be deleted.";
+$vocab["cancel"]                = "Cancel";
+$vocab["registered"]            = "Registered";
+$vocab["na"]                    = "[N/A]";
+$vocab["compound_name"]            = '%1$s (%2$s)';  // 1: username, 2: display name
+$vocab["registrant_registered_by"] = '%1$s (by %2$s)';  // 1: Registrant, 2: Registered by
+$vocab["registrant_username_and_registered_by"] = '%1$s (%2$s) (by %3$s)';  // 2: Registrant username, 2: Registrant display name, 3: Registered by
+$vocab["unique_addresses_copied"]  = "%%d unique email addresses copied to the clipboard."; // Specifier substitution done in JavaScript, so escape the '%'
+$vocab["clipboard_copy_failed"]    = "Clipboard copy failed.";
 
 // Used in admin.php
+$vocab["no_message"]         = "There is currently no message to display above the calendar.";
+$vocab["this_message"]       = "The message below will be displayed above the calendar.";
+$vocab["this_message_from"]  = "The message below will be displayed above the calendar from %s.";
+$vocab["this_message_until"] = "The message below will be displayed above the calendar until %s.";
+$vocab["this_message_from_until"] = 'The message below will be displayed above the calendar from %1$s until %2$s.';
 $vocab["edit"]               = "Edit";
 $vocab["delete"]             = "Delete";
 $vocab["rooms"]              = "Rooms";
@@ -438,7 +487,6 @@ $vocab["empty_name"]         = "You have not entered a name!";
 // Used in edit_area.php and/or edit_room.php
 $vocab["editarea"]                = "Edit Area";
 $vocab["change"]                  = "Change";
-$vocab["backadmin"]               = "Back to Rooms";
 $vocab["editroom"]                = "Edit Room";
 $vocab["viewroom"]                = "View Room";
 $vocab["not_found"]               = " not found";
@@ -484,8 +532,8 @@ $vocab["sort_key_note"]           = "This is the key used for ordering rooms";
 $vocab["booking_policies"]        = "Booking policies";
 $vocab["booking_creation"]        = "Booking creation";
 $vocab["booking_deletion"]        = "Booking deletion";
-$vocab["booking_limits"]          = "Limits on the number of bookings";
-$vocab["booking_limits_secs"]     = "Limits on the total length of bookings (times mode only)";
+$vocab["booking_limits"]          = "Limits on the number of bookings per user";
+$vocab["booking_limits_secs"]     = "Limits on the total length of bookings per user (times mode only)";
 $vocab["booking_durations"]       = "Limits on the duration of bookings";
 $vocab["max_duration"]            = "Maximum duration";
 $vocab["min_book_ahead"]          = "Advance booking - minimum";
@@ -521,12 +569,16 @@ $vocab["disabled_room_note"]      = "If this room is disabled, it will not appea
 $vocab["book_ahead_note_periods"] = "When using periods, book ahead times are rounded down to the nearest whole day.";
 $vocab["invalid_types"]           = "Invalid types";
 $vocab["invalid_types_note"]      = "These are types that are not allowed to be used in this room.";
-
+$vocab["select_note"]             = "Use Control-Click to select/deselect an option";
 
 // Used in edit_users.php
 $vocab["name_empty"]          = "You must enter a name.";
 $vocab["name_not_unique"]     = "already exists.   Please choose another name.";
+$vocab["invalid_date"]        = "The field '%s' must contain a valid date in the format YYYY-MM-DD.";
 $vocab["confirm_delete_user"] = "Are you sure you want to delete this user?";
+$vocab["confirm_delete_user_plus"]  = "Are you sure you want to delete this user? They are involved in " .
+                                      "bookings as a creator, modifier or registrant and deleting the user " .
+                                      "will lose information such as their display name and email address.";
 
 // Used in del.php
 $vocab["deletefollowing"]    = "This will delete the following bookings";
@@ -548,15 +600,15 @@ $vocab["system"]                  = "System";
 $vocab["servertime"]              = "Server time";
 $vocab["server_software"]         = "Server software";
 $vocab["extensions"]              = "Extensions";
-$vocab["please_contact"]          = "Please contact ";
-$vocab["for_any_questions"]       = "for any questions that aren't answered here.";
+$vocab["please_contact"]          = "Please contact %s for any questions that aren't answered here.";
 
 // Used in import.php
 $vocab["import_icalendar"]            = "Import an iCalendar file";
+$vocab["source"]                      = "Source";
 $vocab["area_room_settings"]          = "Areas and rooms";
 $vocab["other_settings"]              = "Other settings";
-$vocab["import_intro"]                = "This form allows you to import an RFC 5545 compliant " .
-                                        "iCalendar file into MRBS.   Only those repeating events " .
+$vocab["import_intro"]                = "This form allows you to import an RFC 5545 compliant iCalendar " .
+                                        "into MRBS from a file or URL.   Only those repeating events " .
                                         "that have a recurrence rule with an equivalent repeat type in " .
                                         "MRBS will be imported.";
 $vocab["supported_file_types"]        = "The following file types are supported:";
@@ -564,15 +616,25 @@ $vocab["import_text_file"]            = "uncompressed iCalendar files";
 $vocab["import_zip"]                  = "zip archives, including multiple files in an archive";
 $vocab["import_gzip"]                 = "gzip files";
 $vocab["import_bzip2"]                = "bzip2 files";
+$vocab["source_type"]                 = "Source type";
+$vocab["file"]                        = "File";
 $vocab["file_name"]                   = "File";
+$vocab["url"]                         = "URL";
+$vocab["invalid_url"]                 = "Invalid URL";
 $vocab["import"]                      = "Import";
 $vocab["upload_failed"]               = "Upload failed";
-$vocab["max_allowed_file_size"]       = "The maximum allowed file size is";
+$vocab["max_allowed_file_size"]       = "The maximum allowed file size is %s bytes";
 $vocab["no_file"]                     = "No file was uploaded";
 $vocab["could_not_process"]           = "Import failed: could not process file";
 $vocab["badly_formed_ics"]            = "Badly formed VCALENDAR file";
 $vocab["default_room"]                = "Default room";
 $vocab["default_room_note"]           = "The room to be used if no LOCATION property is specified";
+$vocab["ignore_location"]             = "Use the default room instead of LOCATION";
+$vocab["add_location"]                = "Add the LOCATION to the";
+$vocab["expanded_name"]               = '%1$s [%2$s]'; // 1$ - SUMMARY, 2$ - LOCATION
+$vocab["expanded_empty_name"]         = '[%s]'; // LOCATION
+$vocab["expanded_description"]        = '%1$s [%2$s]'; // 1$ - DESCRIPTION, 2$ - LOCATION
+$vocab["expanded_empty_description"]  = '[%s]'; // LOCATION
 $vocab["area_room_order"]             = "Order";
 $vocab["area_room_order_note"]        = "The order of the area and room names in the LOCATION property";
 $vocab["area_room"]                   = "Area-Room";
@@ -582,6 +644,7 @@ $vocab["area_room_delimiter_note"]    = "The string separating the area and room
                                         "If no delimiter is found MRBS will look for a unique room with the same " .
                                         "name as the LOCATION";
 $vocab["area_room_create"]            = "Create rooms if necessary";
+$vocab["import_past"]                 = "Import past bookings";
 $vocab["default_type"]                = "Default type";
 $vocab["room_does_not_exist_no_area"] = "room does not exist and cannot be added - no area given";
 $vocab["room_not_unique_no_area"]     = "room name is not unique.  Cannot choose which one without an area.";
@@ -592,16 +655,23 @@ $vocab["creating_new_room"]           = "Creating new room:";
 $vocab["could_not_create_area"]       = "Could not create area";
 $vocab["could_not_create_room"]       = "Could not create room";
 $vocab["could_not_find_room"]         = "Could not find room";
-$vocab["could_not_import"]            = "Could not import";
+$vocab["could_not_import"]            = 'Could not import \'%1$s\' (UID: %2$s)';  // 1$ name, 2$ UID
+$vocab["import_no_SUMMARY"]           = "Imported event - no SUMMARY available";  // This string cannot be empty
 $vocab["no_LOCATION"]                 = "The VEVENT did not include a LOCATION property";
 $vocab["invalid_RRULE"]               = "Invalid RRULE: missing FREQ part";
+$vocab["invalid_RFC5545_day"]         = "Invalid day '%s'";
 $vocab["more_than_one_BYDAY"]         = "MRBS does not support more than one BYDAY value when FREQ=";
 $vocab["BYDAY_equals_5"]              = "MRBS does not support a BYDAY value of 5";
 $vocab["unsupported_FREQ"]            = "MRBS does not support FREQ=";
 $vocab["unsupported_COUNT"]           = "COUNT not yet supported by MRBS";
 $vocab["no_indefinite_repeats"]       = "Indefinite repeats not yet supported by MRBS";
+$vocab["bad_timezone"]                = "Unknown or bad timezone '%s'";
 $vocab["events_imported"]             = "events imported";
 $vocab["events_not_imported"]         = "events not imported";
+
+// Used in EntryInterval.php
+$vocab["range_separator"]     = " - ";  // For separating two dates/times in a range
+$vocab["date_time_separator"] = ", ";   // For separating a date from a time
 
 // Used in DataTables
 $vocab["dt_all"]             = "All";
@@ -619,7 +689,9 @@ $vocab["type.I"]            = "Internal";
 $vocab["type.E"]            = "External";
 
 // General
-$vocab["fatal_error"]        = "Whoops!  Unfortunately MRBS has encountered a fatal error.  Please consult your system administrator.";
+$vocab["fatal_error"]        = "Whoops! Unfortunately MRBS has encountered a fatal error.  Please consult your system administrator.";
+$vocab["resize_error"]       = "Whoops! Unfortunately MRBS encountered an error while trying to modify this booking. If this " .
+                               "continues to happen please consult your system administrator.";
 $vocab["fatal_db_error"]     = "Fatal error: unfortunately the database is not available at the moment.";
 $vocab["fatal_no_tables"]    = "Fatal error: the MRBS tables do not exist or cannot be accessed.";
 $vocab["session_expired"]    = "Your session has expired.";

@@ -1,16 +1,22 @@
 <?php
+declare(strict_types=1);
 namespace MRBS;
 
-class DBException extends \PDOException
+use PDOException;
+
+class DBException extends PDOException
 {
-  
-  public function __construct($message, $code=0, \PDOException $previous=null, $sql=null, $params=null)
+
+  public function __construct(string $message, int $code=0, ?PDOException $previous=null, ?string $sql=null, ?array $params=null)
   {
-    $message = $message . "\n" .
-               'SQL: ' . str_replace("\n", '', $sql) . "\n" .
-               'Params: ' . print_r($params, true);
-               
+    if (isset($sql))
+    {
+      $message .= "\n" .
+        'SQL: ' . str_replace("\n", '', $sql) . "\n" .
+        'Params: ' . print_r($params, true);
+    }
+
     parent::__construct($message, $code, $previous);
   }
-  
+
 }

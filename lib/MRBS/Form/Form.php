@@ -1,37 +1,142 @@
 <?php
-
+declare(strict_types=1);
 namespace MRBS\Form;
 
-use MRBS\JFactory;
-use MRBS\Session\SessionCookie;
+use MRBS\Exception;
+use function MRBS\fatal_error;
+use function MRBS\generate_token;
+use function MRBS\get_form_var;
+use function MRBS\get_vocab;
+use function MRBS\session;
 
 
 class Form extends Element
 {
+  public const METHOD_GET = 0;
+  public const METHOD_POST = 1;
+  private const TOKEN_NAME = 'csrf_token';
+
   private static $token = null;
-  private static $token_name = 'csrf_token';  // As of PHP 7.1 this would be a private const
   private static $cookie_set = false;
 
-  public function __construct()
+
+  // Creates a new form, automatically adding a CSRF token and a MAX_FILE_SIZE value
+  // as hidden inputs if the method is POST.  The GET method should only be used for
+  // navigating between pages and not for submitting form data which could change the
+  // database contents or reveal data to which the user is not entitled.
+  public function __construct(int $method=self::METHOD_GET)
   {
     parent::__construct('form');
-    $this->addCSRFToken();
+    $this->setMethod($method);
+  }
+
+
+  // Sets the form method.  If the method is POST then a CSRF token and a MAX_FILE_SIZE
+  // value are also added as hidden inputs.  If the method is GET then these hidden
+  // inputs are removed because, in the case of the CSRF token we don't want it to
+  // appear in the URL for security reasons, and in the case of MAX_FILE_SIZE it should
+  // only be needed for POST requests.
+  // TODO: if this method is called after the constructor then make sure the MAX_FILE_SIZE
+  // TODO: hidden input is at the beginning, before any possible file input elements.
+  private function setMethod(int $method) : Element
+  {
+    if ($method === self::METHOD_GET)
+    {
+      $this->removeHiddenInput('MAX_FILE_SIZE');
+      $this->removeHiddenInput(self::TOKEN_NAME);
+    }
+
+    elseif ($method === self::METHOD_POST)
+    {
+      // Add a MAX_FILE_SIZE hidden input for use by forms that have a file
+      // upload input.  This hidden input must come before the file input
+      // element if it is to be used by PHP. Although at the time of writing
+      // it is not used by any browsers, we can add some JavaScript to check
+      // the file size when it is selected and thus save a failed upload attempt.
+      $max_file_size = ini_get('upload_max_filesize');
+      if ($max_file_size !== false)
+      {
+        $max_file_size = self::convertToBytes($max_file_size);
+        $this->addHiddenInput('MAX_FILE_SIZE', $max_file_size);
+      }
+      // Add a CSRF token
+      $this->addCSRFToken();
+    }
+
+    return parent::setAttribute('method', self::methodToString($method));
+  }
+
+
+  // Converts a method string (eg 'get' or 'GET') to a method constant (eg self::METHOD_GET)
+  private static function methodToInt(string $string) : int
+  {
+    if (strcasecmp($string, 'get') === 0)
+    {
+      return self::METHOD_GET;
+    }
+
+    if (strcasecmp($string, 'post') === 0)
+    {
+      return self::METHOD_POST;
+    }
+
+    throw new Exception("Unsupported method $string");
+  }
+
+
+  // Converts a method constant (eg self::METHOD_GET) to a method string (eg 'get')
+  private static function methodToString(int $int) : string
+  {
+    if ($int === self::METHOD_GET)
+    {
+      return 'get';
+    }
+
+    if ($int === self::METHOD_POST)
+    {
+      return 'post';
+    }
+
+    throw new Exception("Unsupported method constant $int");
+  }
+
+
+  // Sets a form attribute, taking special action in the case of the
+  // method attribute to set/unset the CSRF token and MAX_FILE_SIZE
+  // hidden inputs.  Can cope with either string or integer method values.
+  public function setAttribute(string $name, $value=true): Element
+  {
+    if (strcasecmp($name, 'method') === 0)
+    {
+      if (is_string($value))
+      {
+        $value = self::methodToInt($value);
+      }
+      if ($value === self::METHOD_POST)
+      {
+        $message = "Changing the form method after the form has been created may result " .
+                   "in the MAX_FILE_SIZE hidden input coming after a file input, thus " .
+                   "making it unusable by the server.";
+        trigger_error($message, E_USER_WARNING);
+      }
+      return $this->setMethod($value);
+    }
+
+    return parent::setAttribute($name, $value);
   }
 
 
   // Adds a hidden input to the form
-  public function addHiddenInput($name, $value)
+  public function addHiddenInput(string $name, $value) : Form
   {
-    $element = new ElementInputHidden();
-    $element->setAttributes(array('name'  => $name,
-                                  'value' => $value));
-    $this->addElement($element);
+    $element = new ElementInputHidden($name, $value);
+    $this->addElement($element, $name);
     return $this;
   }
 
 
   // Adds an array of hidden inputs to the form
-  public function addHiddenInputs(array $hidden_inputs)
+  public function addHiddenInputs(array $hidden_inputs) : Form
   {
     foreach ($hidden_inputs as $key => $value)
     {
@@ -41,11 +146,19 @@ class Form extends Element
   }
 
 
+  // Removes a hidden input from the form.
+  private function removeHiddenInput(string $name) : Form
+  {
+    $this->removeElement($name);
+    return $this;
+  }
+
+
   // Returns the HTML for a hidden field containing a CSRF token
-  public static function getTokenHTML()
+  public static function getTokenHTML() : string
   {
     $element = new ElementInputHidden();
-    $element->setAttributes(array('name'  => self::$token_name,
+    $element->setAttributes(array('name'  => self::TOKEN_NAME,
                                   'value' => self::getToken()));
     return $element->toHTML();
   }
@@ -65,7 +178,7 @@ class Form extends Element
   //        or via a POST request.   These pages should not take any action, but as a matter of
   //        good practice should check the token anyway if they have been requested by a POST.
   //        To cater for these pages the $post_only parameter should be set to TRUE.
-  public static function checkToken($post_only=false)
+  public static function checkToken(bool $post_only=false) : void
   {
     global $server;
 
@@ -74,7 +187,7 @@ class Form extends Element
       return;
     }
 
-    $token = \MRBS\get_form_var(self::$token_name, 'string', null, INPUT_POST);
+    $token = get_form_var(self::TOKEN_NAME, 'string', null, INPUT_POST);
     $stored_token = self::getStoredToken();
 
     if (!self::compareTokens($stored_token, $token))
@@ -87,26 +200,26 @@ class Form extends Element
         trigger_error('Possible CSRF attack from IP address ' . $server['REMOTE_ADDR'], E_USER_NOTICE);
       }
 
-      if (method_exists(\MRBS\session(), 'logoffUser'))
+      if (method_exists(session(), 'logoffUser'))
       {
-        \MRBS\session()->logoffUser();
+        session()->logoffUser();
       }
 
-      \MRBS\fatal_error(\MRBS\get_vocab("session_expired"));
+      fatal_error(get_vocab("session_expired"));
     }
   }
 
 
   // $max_unit can be set to 'seconds', 'minutes', 'hours', etc. and
   // can be used to specify the maximum unit to return.
-  public static function getTimeUnitOptions($max_unit=null)
+  public static function getTimeUnitOptions($max_unit=null) : array
   {
     $options = array();
     $units = array('seconds', 'minutes', 'hours', 'days', 'weeks');
 
     foreach ($units as $unit)
     {
-      $options[$unit] = \MRBS\get_vocab($unit);
+      $options[$unit] = get_vocab($unit);
       if (isset($max_unit) && ($max_unit == $unit))
       {
         break;
@@ -116,28 +229,40 @@ class Form extends Element
   }
 
 
-  private function addCSRFToken()
+  private function addCSRFToken() : Form
   {
-    $this->addHiddenInput(self::$token_name, self::getToken());
+    $this->addHiddenInput(self::TOKEN_NAME, self::getToken());
     return $this;
   }
 
 
   // Get a CSRF token
-  public static function getToken()
+  public static function getToken() : string
   {
     $token_length = 32;
 
     if (!isset(self::$token))
     {
       $stored_token = self::getStoredToken();
-      if (isset($stored_token))
+      // The test below should really be isset() rather than !empty().  However occasionally MRBS has the
+      // value 0 stored in the session variable.  It's not clear how or why this is happening.  Until the
+      // root cause is found we test for empty() and if the token is set but empty we generate a new token.
+      // Update: it seems that when the token is 0, so are all the other session variables.  So the problem
+      // is probably not in the form code, but elsewhere.
+      if (!empty($stored_token))
       {
         self::$token = $stored_token;
       }
       else
       {
-        self::$token = \MRBS\generate_token($token_length);
+        if (isset($stored_token))
+        {
+          // The token is set but empty
+          $message = "Stored token is '$stored_token'.  This should not be possible. " .
+                     "Generating a new token.";
+          trigger_error($message,E_USER_WARNING);
+        }
+        self::$token = generate_token($token_length);
         self::storeToken(self::$token);
       }
     }
@@ -150,7 +275,7 @@ class Form extends Element
   // Returns true if they are equal, otherwise false.
   // Note: it is important to provide the user-supplied string as the
   // second parameter, rather than the first.
-  private static function compareTokens($known_token, $user_token)
+  private static function compareTokens($known_token, $user_token) : bool
   {
     if (is_null($known_token) || is_null($user_token))
     {
@@ -168,82 +293,57 @@ class Form extends Element
   }
 
 
-  private static function storeToken($token)
+  private static function storeToken($token) : void
   {
-    global $auth, $csrf_cookie;
-
-    if ($auth['session'] == 'joomla')
-    {
-      // Joomla has its own session handling and will clear the $_SESSION variable,
-      // so if we are using Joomla authentication we need to do sessions the Joomla
-      // way.   (Maybe MRBS should abstract session handling into a separate Session
-      // class in due course?   Note also that Joomla's JSession class has methods for
-      // getting and checking form tokens, so maybe that's another way of doing it?)
-      $session = JFactory::getSession();
-      $session->set(self::$token_name, $token);
-      return;
-    }
-
-    $session_status = session_status();
-
-    // Use PHP sessions if we can
-    if ($session_status !== PHP_SESSION_DISABLED)
-    {
-      if ($session_status === PHP_SESSION_NONE)
-      {
-        if (false === session_start())
-        {
-          throw new \Exception("Could not start session");
-        }
-      }
-      $_SESSION[self::$token_name] = $token;
-      return;
-    }
-
-    // Otherwise use cookies
-    if (!self::$cookie_set)
-    {
-      SessionCookie::setCookie('MRBS_CSRF',
-                               $csrf_cookie['hash_algorithm'],
-                               $csrf_cookie['secret'],
-                               array(self::$token_name => $token),
-                               0);  //Always a session cookie
-
-      self::$cookie_set = true;
-    }
+    session()->set(self::TOKEN_NAME, $token);
   }
 
 
-  private static function getStoredToken()
+  private static function getStoredToken() : ?string
   {
-    global $auth, $csrf_cookie;
+    $result = session()->get(self::TOKEN_NAME);
 
-    if ($auth['session'] == 'joomla')
+    // For some unknown reason the integer value 0 is sometimes stored in the session
+    // variable.  It's not clear how this can happen.
+    if (isset($result) && !is_string($result))
     {
-      $session = JFactory::getSession();
-      return $session->get(self::$token_name);
+      trigger_error("Stored token is of type " . gettype($result) . ", value $result", E_USER_WARNING);
+      $result = strval($result);
     }
 
-    $session_status = session_status();
-
-    // Use PHP sessions if we can
-    if ($session_status !== PHP_SESSION_DISABLED)
-    {
-      if ($session_status === PHP_SESSION_NONE)
-      {
-        if (false === session_start())
-        {
-          throw new \Exception("Could not start session");
-        }
-      }
-      return (isset($_SESSION[self::$token_name])) ? $_SESSION[self::$token_name] : null;
-    }
-
-    // Otherwise use cookies
-    $data = SessionCookie::getCookie('MRBS_CSRF',
-                                     $csrf_cookie['hash_algorithm'],
-                                     $csrf_cookie['secret']);
-
-    return (isset($data[self::$token_name])) ? $data[self::$token_name] : null;
+    return $result;
   }
+
+
+  // Convert a file size to bytes
+  // See https://www.php.net/manual/en/faq.using.php#faq.using.shorthandbytes
+  private static function convertToBytes(string $size) : int
+  {
+    // Split the size into value and units (if any)
+    $values = preg_split('/(?<=[0-9])(?=[^0-9]+)/i', $size);
+
+    if (count($values) == 2)
+    {
+      $result = intval($values[0]);
+      switch ($values[1])
+      {
+        case 'G':
+          $result = 1024 * $result;
+          // Fall through
+        case 'M':
+          $result = 1024 * $result;
+          // Fall through
+        case 'K':
+          $result = 1024 * $result;
+          return $result;
+          break;
+        default:
+          // Unrecognised suffix
+          break;
+      }
+    }
+
+    return intval($size);
+  }
+
 }

@@ -1,18 +1,14 @@
 <?php
+declare(strict_types=1);
 namespace MRBS;
 
 require "../defaultincludes.inc";
 
 http_headers(array("Content-type: application/x-javascript"),
              60*30);  // 30 minute expiry
-
-if ($use_strict)
-{
-  echo "'use strict';\n";
-}
-
 ?>
 
+'use strict';
 
 $(document).on('page_ready', function() {
 
@@ -37,7 +33,7 @@ $(document).on('page_ready', function() {
       // that they can be pasted into an address field in an email client.
       ?>
       extend: 'copy',
-      text: '<?php echo escape_js(get_vocab('copy_email_addresses')) ?>',
+      text: '<?php echo get_js_vocab('copy_email_addresses') ?>',
       header: false,
       title: null,
       customize: function(data) {

@@ -1,16 +1,42 @@
 <?php
+declare(strict_types=1);
 namespace MRBS;
+
+use MRBS\Intl\FormatterFlatpickr;use MRBS\Intl\IntlDatePatternConverter;
 
 require "../defaultincludes.inc";
 
-http_headers(array("Content-type: application/x-javascript"),
-             60*30);  // 30 minute expiry
-
-if ($use_strict)
+// We use ICU datetime patterns in the config file rather than flatpickr formatting
+// tokens so that we can switch to a different datepicker if necessary, without
+// having to change the config settings.
+function get_date_format() : string
 {
-  echo "'use strict';\n";
+  global $datetime_formats;
+
+  if (isset($datetime_formats['datepicker']['pattern']))
+  {
+    try
+    {
+      $converter = new IntlDatePatternConverter(new FormatterFlatpickr());
+      return $converter->convert($datetime_formats['datepicker']['pattern']);
+    }
+    catch (\Exception $e)
+    {
+      // Report the error and fall through to the 'custom' format
+      trigger_error($e->getMessage(), E_USER_WARNING);
+    }
+  }
+
+  return 'custom';
 }
 
+http_headers(array("Content-type: application/x-javascript"),
+             60*30);  // 30 minute expiry
+?>
+
+'use strict';
+
+<?php
 // Fix for iOS 13 where the User Agent string has been changed.
 // See https://github.com/flatpickr/flatpickr/issues/1992
 ?>
@@ -29,7 +55,7 @@ function iPadMobileFix() {
         }
       };
     };
-};
+}
 
 <?php
 // Turn a JavaScript year, month, day (ie with Jan = 0) into an
@@ -38,26 +64,99 @@ function iPadMobileFix() {
 ?>
 function getISODate(year, month, day)
 {
-  while (month > 11)
-  {
-    month = month-12;
-    year++;
-  }
-
-  while (month < 0)
-  {
-    month = month+12;
-    year--;
-  }
-
-  return [
-      year,
-      ('0' + (month + 1)).slice(-2),
-      ('0' + day).slice(-2)
-    ].join('-');
+  <?php // toISOString() converts to UTC, so make the date a UTC date ?>
+  var date = new Date(Date.UTC(year, month, day));
+  return date.toISOString().split('T')[0];
 }
 
 
+// Given a JavaScript Date object returns a date string in YYYY-MM-DD
+// format.  (Note that toISOString() returns a date in UTC time).
+function getLocalISODateString(date)
+{
+  var month = (date.getMonth() + 1).toString().padStart(2, '0');
+  var day = date.getDate().toString().padStart(2, '0');
+  var year = date.getFullYear().toString();
+
+  return [year, month, day].join('-');
+}
+
+
+
+<?php
+// Functions to find the start and end dates of a week and month given a
+// date in YYYY-MM-DD format.
+// weekStarts is the start day of the week (0 for Sunday, 1 for Monday etc.)
+// (Could be implemented by extending the Date class, but extends isn't
+// supported by IE11.)
+?>
+
+function weekStart(date, weekStarts) {
+  <?php
+  // Need to add a time to make sure the date is interpreted as local rather than UTC.
+  // "When the time zone offset is absent, date-only forms are interpreted as a UTC time and
+  // date-time forms are interpreted as local time. This is due to a historical spec error
+  // that was not consistent with ISO 8601 but could not be changed due to web compatibility."
+  ?>
+  var d = new Date(date + "T00:00:00");
+  var diff = d.getDay() - weekStarts;
+  if (diff < 0)
+  {
+    diff += 7;
+  }
+  d.setDate(d.getDate() - diff);
+  return getLocalISODateString(d);
+}
+
+function weekEnd(date, weekStarts) {
+  <?php // Need to add a time to make sure the date is interpreted as local rather than UTC. ?>
+  var d = new Date(weekStart(date, weekStarts) + "T00:00:00");
+  d.setDate(d.getDate() + 6);
+  return getLocalISODateString(d);
+}
+
+function monthStart(date) {
+  <?php // Need to add a time to make sure the date is interpreted as local rather than UTC. ?>
+  var d = new Date(date + "T00:00:00");
+  d.setDate(1);
+  return getLocalISODateString(d);
+}
+
+function monthEnd(date) {
+  <?php // Need to add a time to make sure the date is interpreted as local rather than UTC. ?>
+  var d = new Date(date + "T00:00:00");
+  <?php
+  // Set the date to the first of the month, because otherwise we will
+  // advance by two months when incrementing the month below if we're at the
+  // end of the month and the next month has fewer days than this one.
+  ?>
+  d.setDate(1);
+  d.setMonth(d.getMonth() + 1);
+  d.setDate(0);
+  return getLocalISODateString(d);
+}
+
+
+// Returns an array of dates in the range startDate..endDate, optionally
+// excluding hidden days.
+function datesInRange(startDate, endDate, excludeHiddenDays) {
+  var result=[];
+  <?php // Need to add a time to make sure the date is interpreted as local rather than UTC. ?>
+  var e=new Date(endDate + "T00:00:00");
+  var hiddenDays = [<?php echo implode(',', $hidden_days)?>];
+
+  <?php // dates can be compared using > and < but not == or === ?>
+  for (var d=new Date(startDate + "T00:00:00"); !(d>e); d.setDate(d.getDate()+1))
+  {
+    if (excludeHiddenDays && (hiddenDays.indexOf(d.getDay()) >= 0))
+    {
+      continue;
+    }
+    result.push(getLocalISODateString(d));
+  }
+
+  return result;
+}
 
 $(document).on('page_ready', function() {
 
@@ -69,10 +168,13 @@ $(document).on('page_ready', function() {
   // on mobile devices because they are generally better.
 
   // Localise the flatpickr
+  // Could use new URLSearchParams(document.currentScript.src); and get the lang parameter from the
+  // file's query string, but document.currentScript is not supported by IE (though that probably
+  // doesn't matter much anymore).
   if (null !== ($flatpickr_lang_path = get_flatpickr_lang_path()))
   {
     // Map the flatpickr lang file onto a flatpickr l10ns property and then localize
-    echo 'flatpickr.localize(flatpickr.l10ns.' . get_flatpickr_property($flatpickr_lang_path) . ');';
+    echo 'flatpickr.localize(flatpickr.l10ns["' . get_flatpickr_property($flatpickr_lang_path) . '"]);';
   }
 
 
@@ -122,11 +224,17 @@ $(document).on('page_ready', function() {
         <?php
       }
       ?>
+
+      <?php // And add a class if it's a weekend day ?>
+      var weekDays = [<?php echo implode(',', $weekdays)?>];
+      if (weekDays.indexOf(dayElem.dateObj.getDay()) < 0) {
+        dayElem.classList.add('mrbs-weekend');
+      }
     };
 
 
   <?php
-  // Sync all the minicalendars with this instance of one.   In other words
+  // Sync all the mini-calendars with this instance of one. In other words
   // make the mini-calendars show sequential months, aligning with this one.
   ?>
   function syncCals(instance)
@@ -157,7 +265,7 @@ $(document).on('page_ready', function() {
   var onMinicalChange = function(selectedDates, dateStr, instance) {
       <?php
       // The order of the query string parameters is important here.  It needs to be the
-      // same as the order in the Prev anbd Next navigation links so that the pre-fetched
+      // same as the order in the Prev and Next navigation links so that the pre-fetched
       // pages can be used when possible.
       ?>
       var href = 'index.php';
@@ -169,33 +277,73 @@ $(document).on('page_ready', function() {
       {
         href += '&site=' + encodeURIComponent(args.site);
       }
+      <?php
+      // Set the new date in the mini-calendar, in order to avoid the previous one
+      // still showing as selected.
+      // TODO: change the date in the other mini-calendar of the date appears there as well?
+      ?>
+      instance.setDate([selectedDates[0], selectedDates[0]], false);
       updateBody(href);  <?php // Update the body via an Ajax call to avoid flickering ?>
     };
+
+  var lastValidDate = {};
+
+  <?php
+  $date_format = get_date_format();
+  ?>
 
   var config = {
       plugins: [iPadMobileFix()],
       dateFormat: 'Y-m-d',
       altInput: true,
-      altFormat: 'custom',
-      formatDate: formatDate,
+      altFormat: <?php echo "'" . get_date_format() . "'" ?>,
+      <?php
+      if ($date_format == 'custom')
+      {
+        echo "formatDate: formatDate,\n";
+      }
+      ?>
       onDayCreate: onDayCreate,
       locale: {firstDayOfWeek: <?php echo $weekstarts ?>},
       onChange: function(selectedDates, dateStr, instance) {
-        var submit = $(this.element).data('submit');
-        if (submit)
-        {
-          $('#' + submit).submit();
+        var element = $(instance.element);
+        var submit = element.data('submit');
+        var elementName = element.attr('name');
+        <?php
+        // Flatpickr allows the user to delete the date in the input field, even when allowInput
+        // is false, resulting in an empty string, which then causes problems for edit_entry_handler.php.
+        // See https://github.com/flatpickr/flatpickr/issues/936 and
+        // https://github.com/flatpickr/flatpickr/pull/2252 . At the time of writing the PR has not been
+        // merged.  To get round this we substitute an empty string for the last known valid date,
+        // but only for required inputs.
+        ?>
+        if (dateStr) {
+          lastValidDate[elementName] = dateStr;
         }
-        else
-        {
-          $(this.element).trigger('change');
+        else if (element.prop('required') && lastValidDate[elementName]) {
+          instance.setDate(lastValidDate[elementName]);
+        }
+        <?php // Submit will be set for the datepicker in the banner ?>
+        if (submit) {
+          $('#' + submit).trigger('submit');
+        }
+        else {
+          element.trigger('change');
+        }
+      },
+      onReady: function(selectedDates, dateStr, instance) {
+        if (instance.altInput.ariaLabel === null) {
+          instance.altInput.ariaLabel = instance.input.ariaLabel;
+        }
+        if (dateStr) {
+          lastValidDate[instance.element.getAttribute('name')] = dateStr;
         }
       }
     };
 
   <?php
   // Disable hidden days, unless the user is a booking admin.  (If they're a booking
-  // admin then they'll still be able to select the date but it will be given a different
+  // admin then they'll still be able to select the date, but it will be given a different
   // class so that it can be styled differently - see code above in this file.)
   if (!empty($hidden_days))
   {
@@ -224,7 +372,8 @@ $(document).on('page_ready', function() {
   }
   else
   {
-    config.weekNumbers = <?php echo ($view_week_number) ? 'true' : 'false' ?>;
+    <?php // Only display the week number if the MRBS week starts on the first day of the week ?>
+    config.weekNumbers = <?php echo ($mincals_week_numbers && ($weekstarts == DateTime::firstDayOfWeek($timezone, get_mrbs_locale()))) ? 'true' : 'false' ?>;
   }
 
   flatpickr('input[type="date"]', config);
@@ -246,11 +395,53 @@ $(document).on('page_ready', function() {
         config.onMonthChange = onMonthChange;
         config.onYearChange = onYearChange;
         config.onChange = onMinicalChange;
+        <?php
+        // Setting a range only works if there are no hidden days: it does not make
+        // sense to set a start date of a range on a disabled day.
+        if (empty($hidden_days))
+        {
+          ?>
+          config.mode = 'range';
+          <?php
+        }
+        ?>
+
 
         var minicalendars = flatpickr('span.minicalendar', config);
 
         $.each(minicalendars, function (key, value) {
-            value.setDate(args.pageDate);
+            var startDate, endDate;
+            if (args.view === 'month')
+            {
+              startDate = monthStart(args.pageDate);
+              endDate = monthEnd(args.pageDate);
+            }
+            else if (args.view === 'week')
+            {
+              startDate = weekStart(args.pageDate, <?php echo $weekstarts?>);
+              endDate = weekEnd(args.pageDate, <?php echo $weekstarts?>);
+            }
+            else
+            {
+              startDate = args.pageDate;
+              endDate = startDate;
+            }
+            <?php
+            if (empty($hidden_days))
+            {
+              ?>
+              value.setDate([startDate, endDate]);
+              <?php
+            }
+            else
+            {
+              // If we've got hidden days then highlight in the mini-calendars those
+              // days in the range that are not hidden.
+              ?>
+              value.setDate(datesInRange(startDate, endDate, true));
+              <?php
+            }
+            ?>
             value.changeMonth(key);
           });
 
@@ -260,7 +451,7 @@ $(document).on('page_ready', function() {
         div.css('margin-top', $('.view_container h2').outerHeight(true) + 'px');
 
         <?php
-        // Once the calendars are formed thern we add the class 'formed' which will
+        // Once the calendars are formed then we add the class 'formed' which will
         // bring into play CSS media queries.    We need to do this because if we
         // form them when the media queries are operational then they won't get
         // formed if the result of the query is 'display: none', which means that if
@@ -279,7 +470,7 @@ $(document).on('page_ready', function() {
   $('.view_container').removeClass('js_hidden');
 
   <?php
-  // Show the datepicker in the banner, which has ben hidden up until now
+  // Show the datepicker in the banner, which has been hidden up until now
   ?>
   $('#form_nav').removeClass('js_hidden');
 });

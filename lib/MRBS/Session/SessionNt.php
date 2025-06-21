@@ -1,5 +1,9 @@
 <?php
+declare(strict_types=1);
 namespace MRBS\Session;
+
+use MRBS\User;
+use function MRBS\auth;
 
 /*
  * Session management scheme that uses Windows NT domain users and Internet
@@ -20,13 +24,13 @@ namespace MRBS\Session;
  */
 
 
-class SessionNt extends SessionWithoutLogin
+class SessionNt extends Session
 {
 
   // For this scheme no need to prompt for a name - NT User always there.
-  public function getCurrentUser()
+  public function getCurrentUser() : ?User
   {
-    return \MRBS\auth()->getUser(get_current_user());
+    return auth()->getUser(get_current_user()) ?? parent::getCurrentUser();
   }
 
 }

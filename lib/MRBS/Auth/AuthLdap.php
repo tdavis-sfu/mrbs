@@ -1,7 +1,13 @@
 <?php
 namespace MRBS\Auth;
 
+use MRBS\Exception;
 use MRBS\User;
+use function MRBS\fatal_error;
+use function MRBS\get_microtime;
+use function MRBS\in_arrayi;
+use function MRBS\session;
+use function MRBS\utf8_strtolower;
 
 
 class AuthLdap extends Auth
@@ -159,7 +165,7 @@ class AuthLdap extends Auth
         {
           if (count($$item) != $count)
           {
-            \MRBS\fatal_error("MRBS configuration error: Count of LDAP array config variables doesn't match, aborting!");
+            fatal_error("MRBS configuration error: Count of LDAP array config variables doesn't match, aborting!");
           }
         }
         else
@@ -197,7 +203,11 @@ class AuthLdap extends Auth
    *   false    - The pair are invalid or do not exist
    *   string   - The validated username
    */
-  public function validateUser($user, $pass)
+  public function validateUser(
+    #[\SensitiveParameter]
+    ?string $user,
+    #[\SensitiveParameter]
+    ?string $pass)
   {
     // Check if we do not have a username/password
     // User can always bind to LDAP anonymously with empty password,
@@ -314,53 +324,35 @@ class AuthLdap extends Auth
   }
 
 
-  public function getUser($username)
+  protected function getUserFresh(string $username) : ?User
   {
-    static $users = array();  // Cache results for performance
-
     if (!isset($username) || ($username === ''))
     {
       return null;
     }
 
-    if (!isset($users[$username]))
+    $object = array();
+
+    $res = $this->action('getUserCallback', $username, $object);
+    if (!$res || !isset($object['user']))
     {
-      // Check to see if this is the current user.  If it is then we
-      // can save ourselves an LDAP query.
-      $mrbs_user = \MRBS\session()->getCurrentUser();
-      if (isset($mrbs_user) && ($mrbs_user->username === $username))
-      {
-        $user = $mrbs_user;
-      }
-      // Otherwise we'll have to query LDAP.
-      else
-      {
-        $object = array();
-
-        $res = $this->action('getUserCallback', $username, $object);
-        if (!$res || !isset($object['user']))
-        {
-          return null;
-        }
-
-        $user = parent::getUser($username);
-        $keys = array('display_name', 'email', 'level');
-
-        foreach ($keys as $key)
-        {
-          if (isset($object['user'][$key]))
-          {
-            $user->$key = $object['user'][$key];
-          }
-        }
-      }
-
-      // Update the cache (we use the static variable as the cache rather than the
-      // database because the database might be out of date).
-      $users[$username] = $user;
+      return null;
     }
 
-    return $users[$username];
+    // Use $object['user']['username'] rather than $username because they won't necessarily be
+    // the same.  See https://sourceforge.net/p/mrbs/bugs/518/
+    $user = parent::getUserFresh($object['user']['username']);
+    $keys = array('display_name', 'email', 'level');
+
+    foreach ($keys as $key)
+    {
+      if (isset($object['user'][$key]))
+      {
+        $user->$key = $object['user'][$key];
+      }
+    }
+
+    return $user;
   }
 
 
@@ -381,7 +373,7 @@ class AuthLdap extends Auth
   private static function getUserCallback(&$ldap, $base_dn, $dn, $user_search,
                                           $user, &$object)
   {
-    global $ldap_get_user_email, $ldap_debug_attributes;
+    global $ldap_get_user_email, $ldap_debug_attributes, $max_level;
 
     self::debug("base_dn '$base_dn' dn '$dn' user_search '$user_search' user '$user'");
 
@@ -485,7 +477,7 @@ class AuthLdap extends Auth
     {
       if (isset($object['config']['ldap_admin_group_dn']))
       {
-        $user['level'] = in_array($object['config']['ldap_admin_group_dn'], $user['groups']) ? 2 : 1;
+        $user['level'] = in_arrayi($object['config']['ldap_admin_group_dn'], $user['groups']) ? $max_level : 1;
       }
     }
 
@@ -497,7 +489,7 @@ class AuthLdap extends Auth
 
   public function getUsernames()
   {
-    $mrbs_user = \MRBS\session()->getCurrentUser();
+    $mrbs_user = session()->getCurrentUser();
 
     if (!isset($mrbs_user))
     {
@@ -512,6 +504,7 @@ class AuthLdap extends Auth
 
     if ($res === false)
     {
+      trigger_error("MRBS: could not get LDAP usernames.", E_USER_WARNING);
       return false;
     }
 
@@ -548,13 +541,13 @@ class AuthLdap extends Auth
     $filter = "($filter)";
 
     // Form the attributes
-    $username_attrib = \MRBS\utf8_strtolower($object['config']['ldap_user_attrib']);
+    $username_attrib = utf8_strtolower($object['config']['ldap_user_attrib']);
     $attributes = array($username_attrib);
 
     // The display name attribute might not have been set in the config file
     if (isset($object['config']['ldap_name_attrib']))
     {
-      $display_name_attrib = \MRBS\utf8_strtolower($object['config']['ldap_name_attrib']);
+      $display_name_attrib = utf8_strtolower($object['config']['ldap_name_attrib']);
       $attributes[] = $display_name_attrib;
     }
 
@@ -563,7 +556,7 @@ class AuthLdap extends Auth
     $res = ldap_search($ldap, $base_dn, $filter, $attributes);
     $t = self::getProfileClock();
 
-    if ($res == false)
+    if ($res === false)
     {
       self::debug("ldap_search failed: " . self::ldapError($ldap));
       return false;
@@ -586,7 +579,7 @@ class AuthLdap extends Auth
       while ($attribute)
       {
         $values = ldap_get_values($ldap, $entry, $attribute);
-        $attribute = \MRBS\utf8_strtolower($attribute);  // ready for the comparisons
+        $attribute = utf8_strtolower($attribute);  // ready for the comparisons
 
         if ($attribute == $username_attrib)
         {
@@ -617,29 +610,29 @@ class AuthLdap extends Auth
 
 
   // Returns an array of attributes for use in an LDAP query
-  private static function getAttributes($object, $include_email=true, $include_groups=true)
+  private static function getAttributes(array $object, bool $include_email=true, bool $include_groups=true) : array
   {
     $result = array();
 
     // Username
-    $result['username'] = \MRBS\utf8_strtolower($object['config']['ldap_user_attrib']);
+    $result['username'] = utf8_strtolower($object['config']['ldap_user_attrib']);
 
     // The display name attribute might not have been set in the config file
     if (isset($object['config']['ldap_name_attrib']))
     {
-      $result['display_name'] = \MRBS\utf8_strtolower($object['config']['ldap_name_attrib']);
+      $result['display_name'] = utf8_strtolower($object['config']['ldap_name_attrib']);
     }
 
     // The email address
     if ($include_email && isset($object['config']['ldap_email_attrib']))
     {
-      $result['email'] = \MRBS\utf8_strtolower($object['config']['ldap_email_attrib']);
+      $result['email'] = utf8_strtolower($object['config']['ldap_email_attrib']);
     }
 
     // The group name attribute might not have been set in the config file
     if ($include_groups && isset($object['config']['ldap_group_member_attrib']))
     {
-      $result['groups'] = \MRBS\utf8_strtolower($object['config']['ldap_group_member_attrib']);
+      $result['groups'] = utf8_strtolower($object['config']['ldap_group_member_attrib']);
     }
 
     return $result;
@@ -647,7 +640,7 @@ class AuthLdap extends Auth
 
 
   // Returns an associative array from the result of an LDAP search
-  private static function getResult($ldap, $entry, $attributes)
+  private static function getResult($ldap, $entry, array $attributes) : array
   {
     // Initialise all keys in the user array, in case an attribute isn't present
     $attributes_keys = array_keys($attributes);
@@ -665,7 +658,7 @@ class AuthLdap extends Auth
           $user[$key] = array();
           break;
         default:
-          throw new \Exception("Unknown key '$key'");
+          throw new Exception("Unknown key '$key'");
       }
     }
 
@@ -675,7 +668,7 @@ class AuthLdap extends Auth
     while ($attribute)
     {
       $values = ldap_get_values($ldap, $entry, $attribute);
-      $attribute = \MRBS\utf8_strtolower($attribute);  // ready for the comparisons
+      $attribute = utf8_strtolower($attribute);  // ready for the comparisons
 
       if ($attribute == $attributes['username'])
       {
@@ -719,7 +712,7 @@ class AuthLdap extends Auth
    * Returns:
    *   boolean   - Whether the action was successful
    */
-  public function action($callback, $username, &$object, $keep_going=false)
+  public function action(string $callback, string $username, &$object, bool $keep_going=false) : bool
   {
     global $ldap_unbind_between_attempts;
 
@@ -846,7 +839,7 @@ class AuthLdap extends Auth
 
 
   // A wrapper for ldap_bind() that optionally suppresses "invalid credentials" errors.
-  private static function ldapBind ($link_identifier, $bind_rdn=null, $bind_password=null)
+  private static function ldapBind ($link_identifier, ?string $bind_rdn=null, ?string $bind_password=null) : bool
   {
     global $ldap_suppress_invalid_credentials;
 
@@ -868,19 +861,9 @@ class AuthLdap extends Auth
 
 
   // Gets the full LDAP URI
-  private static function getUri($idx)
+  private static function getUri(int $idx) : string
   {
-    // First get the port
-    if (isset(self::$all_ldap_opts['ldap_port'][$idx]))
-    {
-      $port = self::$all_ldap_opts['ldap_port'][$idx];
-    }
-    else
-    {
-      $port = self::DEFAULT_PORT_LDAP;
-    }
-
-    // Now get the scheme and host
+    // First get the scheme and host
     $host = self::$all_ldap_opts['ldap_host'][$idx];
     $parsed_url = parse_url($host);
     if (isset($parsed_url['scheme']))
@@ -888,17 +871,33 @@ class AuthLdap extends Auth
       $scheme = $parsed_url['scheme'];
       $host = $parsed_url['host'];
     }
+
+    // If we haven't got a scheme then make an educated guess based on the port.
+    if (!isset($scheme))
+    {
+      // And if there isn't a port defined either then use a sensible default
+      $port = self::$all_ldap_opts['ldap_port'][$idx] ?? self::DEFAULT_PORT_LDAP;
+      $scheme = ($port == self::DEFAULT_PORT_LDAPS) ? 'ldaps' : 'ldap';
+    }
+    // If we have got a scheme then get the port.  If it has been defined explicitly in the
+    // config file, then use that. Otherwise make an educated guess based on the scheme.
     else
     {
-      // Make an educated guess at the scheme
-      $scheme = ($port == self::DEFAULT_PORT_LDAPS) ? 'ldaps' : 'ldap';
+      if (isset(self::$all_ldap_opts['ldap_port'][$idx]))
+      {
+        $port = self::$all_ldap_opts['ldap_port'][$idx];
+      }
+      else
+      {
+        $port = ($scheme == 'ldaps') ? self::DEFAULT_PORT_LDAPS : self::DEFAULT_PORT_LDAP;
+      }
     }
 
     return "$scheme://$host:$port";
   }
 
 
-  private static function setOptions($ldap, $idx)
+  private static function setOptions($ldap, int $idx) : void
   {
     if (isset(self::$all_ldap_opts['ldap_deref'][$idx]))
     {
@@ -941,7 +940,7 @@ class AuthLdap extends Auth
 
 
   // Adds extra diagnostic information to ldap_error()
-  private static function ldapError ($link_identifier)
+  private static function ldapError ($link_identifier) : string
   {
     $result = ldap_error($link_identifier);
 
@@ -963,18 +962,13 @@ class AuthLdap extends Auth
    * $ldap_debug or $ldap_debug_attributes is true.
    *
    */
-  private static function debug($message)
+  private static function debug(string $message) : void
   {
     global $ldap_debug, $ldap_debug_attributes;
 
     if ($ldap_debug || $ldap_debug_attributes)
     {
-      list($called, $caller) = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 2);
-      error_log(
-          "[MRBS DEBUG] " .
-          $caller['class'] . $caller['type'] . $caller['function'] . '(' . $called['line'] . ')' .
-          ": $message"
-        );
+      self::logDebugMessage($message);
     }
   }
 
@@ -985,7 +979,7 @@ class AuthLdap extends Auth
 
     if ($ldap_debug)
     {
-      return (\MRBS\get_microtime() - self::$profile_clock);
+      return (get_microtime() - self::$profile_clock);
     }
     else
     {
@@ -994,13 +988,13 @@ class AuthLdap extends Auth
   }
 
 
-  private static function resetProfileClock()
+  private static function resetProfileClock() : void
   {
     global $ldap_debug;
 
     if ($ldap_debug)
     {
-      self::$profile_clock = \MRBS\get_microtime();
+      self::$profile_clock = get_microtime();
     }
   }
 

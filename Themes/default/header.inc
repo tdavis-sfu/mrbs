@@ -1,13 +1,16 @@
 <?php
+declare(strict_types=1);
 namespace MRBS;
 
-use MRBS\Form\Form;
+use chillerlan\QRCode\QRCode;
+use chillerlan\QRCode\QROptions;
 use MRBS\Form\ElementInputDate;
 use MRBS\Form\ElementInputSearch;
 use MRBS\Form\ElementInputSubmit;
+use MRBS\Form\Form;
 
 
-function print_head($simple=false)
+function print_head(bool $simple=false) : void
 {
   global $refresh_rate;
 
@@ -60,7 +63,7 @@ function print_head($simple=false)
 
 // Print the basic site information.   This function is used for all headers, including
 // the simple header, and so mustn't require any database access.
-function print_header_site_info()
+function print_header_site_info() : void
 {
   global $mrbs_company,
          $mrbs_company_url,
@@ -118,7 +121,7 @@ function print_header_site_info()
 }
 
 
-function print_goto_date($context)
+function print_goto_date(array $context) : void
 {
   global $multisite, $site;
 
@@ -134,7 +137,6 @@ function print_goto_date($context)
 
   $form->setAttributes(array('id'     => $form_id,
                              'class'  => 'js_hidden',
-                             'method' => 'get',
                              'action' => multisite('index.php')))
        ->addHiddenInput('view', $context['view']);
 
@@ -156,6 +158,7 @@ function print_goto_date($context)
   $input = new ElementInputDate();
   $input->setAttributes(array('name'        => 'page_date',
                               'value'       => format_iso_date($context['year'], $context['month'], $context['day']),
+                              'aria-label'  => get_vocab('goto'),
                               'required'    => true,
                               'data-submit' => $form_id));
 
@@ -169,7 +172,7 @@ function print_goto_date($context)
 }
 
 
-function print_outstanding($query)
+function print_outstanding(string $query) : void
 {
   $mrbs_user = session()->getCurrentUser();
 
@@ -192,7 +195,12 @@ function print_outstanding($query)
       $class .= ' attention';
     }
 
-    echo '<a href="' . htmlspecialchars(multisite("pending.php?$query")) . '"' .
+    $url = 'pending.php';
+    if ($query !== '')
+    {
+      $url .= "?$query";
+    }
+    echo '<a href="' . htmlspecialchars(multisite($url)) . '"' .
          " class=\"$class\"" .
          ' title="' . get_vocab('outstanding', $n_outstanding) .
          "\">$n_outstanding</a>\n";
@@ -200,14 +208,20 @@ function print_outstanding($query)
 }
 
 
-function print_menu_items($query)
+function print_menu_items(string $query) : void
 {
-  global $auth;
+  global $auth, $kiosk_mode_enabled;
 
   $menu_items = array('help'   => 'help.php',
                       'report' => 'report.php',
-                      'import' => 'import.php',
-                      'rooms'  => 'admin.php');
+                      'import' => 'import.php');
+
+  if ($kiosk_mode_enabled)
+  {
+    $menu_items['kiosk'] = 'kiosk.php';
+  }
+
+  $menu_items['rooms'] = 'admin.php';
 
   if ($auth['type'] == 'db')
   {
@@ -219,14 +233,19 @@ function print_menu_items($query)
     // Only print menu items for which the user is allowed to access the page
     if (checkAuthorised($page, true))
     {
-      echo '<a href="' . htmlspecialchars(multisite("$page?$query")) . '">' . get_vocab($token) . "</a>\n";
+      $url = $page;
+      if ($query !== '')
+      {
+        $url .= "?$query";
+      }
+      echo '<a href="' . htmlspecialchars(multisite($url)) . '">' . get_vocab($token) . "</a>\n";
     }
   }
 }
 
 
 
-function print_search($context)
+function print_search(array $context) : void
 {
   if (!checkAuthorised('search.php', true))
   {
@@ -236,15 +255,21 @@ function print_search($context)
 
   echo "<div>\n";
 
-  $form = new Form();
+  $form = new Form(Form::METHOD_POST);
 
-  $form->setAttributes(array('id'     => 'header_search',
-                             'method' => 'post',
-                             'action' => multisite('search.php')))
-       ->addHiddenInputs(array('view'  => $context['view'],
-                               'year'  => $context['year'],
-                               'month' => $context['month'],
-                               'day'   => $context['day']));
+  $form->setAttributes(array(
+          'id'     => 'header_search',
+          'action' => multisite('search.php'))
+        )
+       ->addHiddenInputs(array(
+          'view'       => $context['view'],
+          'year'       => $context['year'],
+          'month'      => $context['month'],
+          'day'        => $context['day'],
+          'from_date'  => format_iso_date($context['year'], $context['month'], $context['day'])
+        )
+     );
+
   if (!empty($context['area']))
   {
     $form->addHiddenInput('area', $context['area']);
@@ -276,7 +301,7 @@ function print_search($context)
 
 
 // Generate the username link, which gives a report on the user's upcoming bookings.
-function print_report_link(User $user)
+function print_report_link(User $user) : void
 {
   // If possible, provide a link to the Report page, otherwise the Search page
   // and if that's not possible just print the username with no link.  (Note that
@@ -291,7 +316,11 @@ function print_report_link(User $user)
   elseif (checkAuthorised('search.php', true))
   {
     $attributes = array('action' => multisite('search.php'));
-    $hidden_inputs = array('search_str' => $user->username);
+    $date_now = new DateTime();
+    $hidden_inputs = array(
+      'search_str' => $user->username,
+      'from_date'  => $date_now->getISODate()
+    );
   }
   else
   {
@@ -300,10 +329,9 @@ function print_report_link(User $user)
   }
 
   // We're authorised for either Report or Search so print the form.
-  $form = new Form();
+  $form = new Form(Form::METHOD_POST);
 
   $attributes['id'] = 'show_my_entries';
-  $attributes['method'] = 'post';
   $form->setAttributes($attributes)
        ->addHiddenInputs($hidden_inputs);
 
@@ -316,16 +344,15 @@ function print_report_link(User $user)
 }
 
 
-function print_logonoff_button($params, $value)
+function print_logonoff_button(array $params, string $value) : void
 {
-  $form = new Form();
-  $form->setAttributes(array('method' => $params['method'],
-                             'action' => $params['action']));
+  $form = new Form($params['method']);
+  $form->setAttributes(array('action' => $params['action']));
 
   // A Get method will replace the query string in the action URL with a query
   // string made up of the hidden inputs.  So put any parameters in the action
   // query string into hidden inputs.
-  if (utf8_strtolower($params['method']) == 'get')
+  if ($params['method'] == Form::METHOD_GET)
   {
     $query_string = parse_url($params['action'], PHP_URL_QUERY);
     if (isset($query_string))
@@ -350,7 +377,7 @@ function print_logonoff_button($params, $value)
 }
 
 
-function print_logon()
+function print_logon() : void
 {
   if (method_exists(session(), 'getLogonFormParams'))
   {
@@ -363,7 +390,7 @@ function print_logon()
 }
 
 
-function print_logoff()
+function print_logoff() : void
 {
   if (method_exists(session(), 'getLogoffFormParams'))
   {
@@ -377,8 +404,10 @@ function print_logoff()
 
 // $context is an associative array indexed by 'view', 'view_all', 'year', 'month', 'day', 'area' and 'room'.
 // When $omit_login is true the Login link is omitted.
-function print_banner($context, $simple=false, $omit_login=false)
+function print_banner(?array $context, $simple=false, $omit_login=false) : void
 {
+  global $kiosk_QR_code, $auth;
+
   echo '<header class="banner' . (($simple) ? ' simple' : '') . "\">\n";
 
   $vars = array();
@@ -419,7 +448,8 @@ function print_banner($context, $simple=false, $omit_login=false)
 
     $mrbs_user = session()->getCurrentUser();
 
-    if (isset($mrbs_user))
+    // The empty string username is a special case when using anonymous booking
+    if (isset($mrbs_user) && (!$auth['allow_anonymous_booking'] || ($mrbs_user->username !== '')))
     {
       print_report_link($mrbs_user);
       print_logoff();
@@ -439,6 +469,25 @@ function print_banner($context, $simple=false, $omit_login=false)
     echo "</nav>\n";
 
     echo "</nav>\n";
+
+    // Add in a QR code for kiosk mode
+    // (The QR code library requires PHP 7.4 or greater and the mbstring extension)
+    if (isset($context['kiosk']) &&
+        $kiosk_QR_code &&
+        (version_compare(PHP_VERSION, '7.4') >= 0) &&
+        //Check for a Mbstring constant rather than using extension_loaded, which is sometimes disabled
+        defined('MB_CASE_UPPER'))
+    {
+      $url = multisite(url_base() . "/index.php?$query");
+      echo '<nav class="qr" title="' . htmlspecialchars($url) . "\">\n";
+      $options = new QROptions([
+        'outputType'  => QRCode::OUTPUT_MARKUP_SVG,
+        'imageBase64' => false,
+      ]);
+      $qrcode = new QRCode($options);
+      echo $qrcode->render($url);
+      echo "</nav>\n";
+    }
   }
 
   echo "</header>\n";
@@ -448,10 +497,10 @@ function print_banner($context, $simple=false, $omit_login=false)
 
 // Print a message which will only be displayed (thanks to CSS) if the user is
 // using an unsupported browser.
-function print_unsupported_message($context)
+function print_unsupported_message(?array $context) : void
 {
   echo "<div class=\"unsupported_message\">\n";
-  print_banner($context, $simple=true);
+  print_banner($context, true);
   echo "<div class=\"contents\">\n";
   echo "<p>" . get_vocab('browser_not_supported', get_vocab('mrbs_abbr')) . "</p>\n";
   echo "</div>\n";
@@ -465,9 +514,9 @@ function print_unsupported_message($context)
 // If $simple is true, then just print a simple header that doesn't require any database
 // access or JavaScript (useful for fatal errors and database upgrades).
 // When $omit_login is true the Login link is omitted.
-function print_theme_header($context=null, $simple=false, $omit_login=false)
+function print_theme_header(?array $context=null, bool $simple=false, bool $omit_login=false) : void
 {
-  global $multisite, $site, $default_view, $default_view_all, $view_week_number;
+  global $multisite, $site, $default_view, $default_view_all, $view_week_number, $style_weekends;
 
   if ($simple)
   {
@@ -506,20 +555,20 @@ function print_theme_header($context=null, $simple=false, $omit_login=false)
     // This will set the correct timezone for the area
     get_area_settings($context['area']);
 
-    // If we dont know the right date then use today's
+    // If we don't know the right date then use today's
     if (!isset($context['year']))
     {
-      $context['year'] = date('Y');
+      $context['year'] = (int) date('Y');
     }
 
     if (!isset($context['month']))
     {
-      $context['month'] = date('m');
+      $context['month'] = (int) date('m');
     }
 
     if (!isset($context['day']))
     {
-      $context['day'] = date('d');
+      $context['day'] = (int) date('d');
     }
 
     // Get the form token now, before any headers are sent, in case we are using the 'cookie'
@@ -545,6 +594,11 @@ function print_theme_header($context=null, $simple=false, $omit_login=false)
     if ($multisite && isset($site) && ($site !== ''))
     {
       $data['site'] = $site;
+    }
+
+    if (isset($context['kiosk']))
+    {
+      $data['kiosk'] = $context['kiosk'];
     }
 
     $mrbs_user = session()->getCurrentUser();
@@ -573,6 +627,11 @@ function print_theme_header($context=null, $simple=false, $omit_login=false)
     {
       $classes[] = 'view_week_number';
     }
+    if ($style_weekends)
+    {
+      $classes[] = 'style_weekends';
+    }
+
   }
 
   $headers = array("Content-Type: text/html; charset=" . get_charset());
@@ -596,7 +655,7 @@ function print_theme_header($context=null, $simple=false, $omit_login=false)
   {
     if (isset($value))
     {
-      echo " data-$key=\"" . htmlspecialchars($value) . '"';
+      echo " data-$key=\"" . htmlspecialchars((string)$value) . '"';
     }
   }
   echo ">\n";

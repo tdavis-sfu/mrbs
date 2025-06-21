@@ -17,7 +17,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- * PHP Version 5
+ * PHP Version 7
  *
  * @file     CAS/PGTStorage/AbstractStorage.php
  * @category Authentication
@@ -61,7 +61,7 @@ class CAS_PGTStorage_File extends CAS_PGTStorage_AbstractStorage
      * This method returns the name of the directory where PGT's should be stored
      * on the filesystem.
      *
-     * @return the name of a directory (with leading and trailing '/')
+     * @return string the name of a directory (with leading and trailing '/')
      *
      * @private
      */
@@ -78,7 +78,7 @@ class CAS_PGTStorage_File extends CAS_PGTStorage_AbstractStorage
      * This method returns an informational string giving the type of storage
      * used by the object (used for debugging purposes).
      *
-     * @return an informational string.
+     * @return string an informational string.
      * @public
      */
     function getStorageType()
@@ -90,7 +90,7 @@ class CAS_PGTStorage_File extends CAS_PGTStorage_AbstractStorage
      * This method returns an informational string giving informations on the
      * parameters of the storage.(used for debugging purposes).
      *
-     * @return an informational string.
+     * @return string an informational string.
      * @public
      */
     function getStorageInfo()
@@ -127,6 +127,12 @@ class CAS_PGTStorage_File extends CAS_PGTStorage_AbstractStorage
             if (!preg_match('`^[a-zA-Z]:`', $path)) {
                 phpCAS::error('an absolute path is needed for PGT storage to file');
             }
+            
+			// ensure that the directory separator on Windows is '/' for consistency with the rest of the phpcas code
+			$path = str_replace(DIRECTORY_SEPARATOR , '/', $path); 
+ 
+			// store the path (with a trailing '/') 
+			$path = preg_replace('|([^/])$|', '$1/', $path);            
 
         } else {
 
@@ -174,7 +180,7 @@ class CAS_PGTStorage_File extends CAS_PGTStorage_AbstractStorage
      *
      * @param string $pgt_iou the PGT iou.
      *
-     * @return a filename
+     * @return string a filename
      * @private
      */
     function getPGTIouFilename($pgt_iou)
@@ -227,7 +233,7 @@ class CAS_PGTStorage_File extends CAS_PGTStorage_AbstractStorage
      *
      * @param string $pgt_iou the PGT iou
      *
-     * @return the corresponding PGT, or FALSE on error
+     * @return string|false the corresponding PGT, or FALSE on error
      *
      * @public
      */

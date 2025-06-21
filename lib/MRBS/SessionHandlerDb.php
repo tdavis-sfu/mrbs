@@ -1,6 +1,24 @@
 <?php
-
+declare(strict_types=1);
 namespace MRBS;
+
+use PDOException;
+use SessionHandlerInterface;
+use SessionUpdateTimestampHandlerInterface;
+
+// Suppress deprecation notices until we get to requiring at least PHP 8
+// because union types, needed for the return types of read() and gc(), are
+// not supported in PHP 7.  Using the #[\ReturnTypeWillChange] attribute
+// does not help because that was only introduced in PHP 8.1.
+if (version_compare(MRBS_MIN_PHP_VERSION, '8.0.0') < 0)
+{
+  $old_level = error_reporting();
+  error_reporting($old_level & ~E_DEPRECATED);
+}
+else
+{
+  trigger_error("This code can now be removed", E_USER_NOTICE);
+}
 
 // Use our own PHP session handling by storing sessions in the database.   This has three advantages:
 //    (a) it's more secure, especially on shared servers
@@ -8,13 +26,25 @@ namespace MRBS;
 //        directory is not writable
 //    (c) it's more resilient in clustered environments
 
-class SessionHandlerDb implements \SessionHandlerInterface
+class SessionHandlerDb implements SessionHandlerInterface, SessionUpdateTimestampHandlerInterface
 {
   private static $table;
 
   public function __construct()
   {
     self::$table = _tbl('sessions');
+
+    // We need to lock the session data while it is in use in order to prevent problems
+    // with Ajax calls.  This happens with the default file session handler, but
+    // in order to provide it with the DB session handler we need the ability to set multiple locks.
+    if (!db()->supportsMultipleLocks())
+    {
+      throw new SessionHandlerDbException(
+          "MRBS: database does not support multiple locks.",
+          SessionHandlerDbException::NO_MULTIPLE_LOCKS
+        );
+
+    }
 
     if (!db()->table_exists(self::$table))
     {
@@ -24,13 +54,16 @@ class SessionHandlerDb implements \SessionHandlerInterface
       // when a new SessionHandlerDb object is created we do it in a try/catch block.  [Note that
       // the exception can't be thrown on open() because a try/catch round session_start() won't
       // catch the exception - maybe because open() is a callback function??]
-      throw new \Exception("MRBS: session table does not exist");
+      throw new SessionHandlerDbException(
+          "MRBS: session table does not exist",
+          SessionHandlerDbException::TABLE_NOT_EXISTS
+        );
     }
   }
 
   // The return value (usually TRUE on success, FALSE on failure). Note this value is
   // returned internally to PHP for processing.
-  public function open($path, $name)
+  public function open($path, $name): bool
   {
     return true;
   }
@@ -38,7 +71,7 @@ class SessionHandlerDb implements \SessionHandlerInterface
 
   // The return value (usually TRUE on success, FALSE on failure). Note this value is
   // returned internally to PHP for processing.
-  public function close()
+  public function close(): bool
   {
     return true;
   }
@@ -49,6 +82,19 @@ class SessionHandlerDb implements \SessionHandlerInterface
   // processing.
   public function read($id)
   {
+    global $dbsys;
+
+    // Acquire mutex to lock the session id.  When using the default file session handler
+    // locks are obtained using flock().  We need to do something similar in order to prevent
+    // problems with multiple Ajax requests writing to the S_SESSION variable while
+    // another process is still using it.
+    // Acquire a lock
+    if (!db()->mutex_lock($id))
+    {
+      trigger_error("Failed to acquire a lock", E_USER_WARNING);
+      return '';
+    }
+
     try
     {
       $sql = "SELECT data
@@ -56,13 +102,13 @@ class SessionHandlerDb implements \SessionHandlerInterface
                WHERE id=:id
                LIMIT 1";
 
-      $result = db()->query1($sql, array(':id' => $id));
+      $result = db()->query_scalar_non_bool($sql, array(':id' => $id));
     }
     catch (DBException $e)
     {
       // If the exception is because the sessions table doesn't exist, then that's
       // probably because we're in the middle of the upgrade that creates the
-      // sessions table, so just ignore it and return ''.   Otherwise re-throw
+      // sessions table, so just ignore it and return ''.   Otherwise, re-throw
       // the exception.
       if (!db()->table_exists(self::$table))
       {
@@ -71,49 +117,76 @@ class SessionHandlerDb implements \SessionHandlerInterface
       throw $e;
     }
 
-    return ($result === -1) ? '' : $result;
+    if (!isset($result) || ($result === false))
+    {
+      return '';
+    }
+
+    // TODO: fix this properly
+    // In PostgreSQL we store the session base64 encoded.  That's because the session data string (encoded by PHP)
+    // can contain NULL bytes when the User object has protected properties.  The solution is probably to convert
+    // the data column in PostgreSQL to be bytea rather than text.  However this doesn't seem to work for some reason -
+    // no doubt soluble - and also upgrading the database is complicated while the roles branch is still under
+    // development and there are two sets of upgrades to be merged.  So for the moment we have this rather inelegant
+    // workaround.
+    if ($dbsys == 'pgsql')
+    {
+      $decoded = base64_decode($result, true);
+      // Test to see if the data is base64 encoded so that we can handle session data written before this change.
+      if (($decoded !== false) && (base64_encode($decoded) === $result))
+      {
+        return $decoded;
+      }
+    }
+
+    return $result;
   }
 
 
   // The return value (usually TRUE on success, FALSE on failure). Note this value is
   // returned internally to PHP for processing.
-  public function write($id, $data)
+  public function write($id, $data): bool
   {
-    $sql = "SELECT COUNT(*) FROM " . self::$table . " WHERE id=:id LIMIT 1";
-    $rows = db()->query1($sql, array(':id' => $id));
+    global $dbsys;
 
-    if ($rows > 0)
+    // See comment in read()
+    if ($dbsys == 'pgsql')
     {
-      $sql = "UPDATE " . self::$table . "
-                 SET data=:data, access=:access
-               WHERE id=:id";
-    }
-    else
-    {
-      // The id didn't exist so we have to INSERT it (we couldn't use
-      // REPLACE INTO because we have to cater for both MySQL and PostgreSQL)
-      $sql = "INSERT INTO " . self::$table . "
-                          (id, data, access)
-                   VALUES (:id, :data, :access)";
+      $data = base64_encode($data);
     }
 
-    $sql_params = array(':id' => $id,
-                        ':data' => $data,
-                        ':access' => time());
+    $query_data = array(
+      'id' => $id,
+      'data' => $data,
+      'access' => time()
+    );
 
-    db()->command($sql, $sql_params);
+    $sql_params = array();
+    $sql = db()->syntax_upsert($query_data, self::$table, $sql_params, 'id');
 
-    return true;
+    // From the MySQL manual:
+    // "With ON DUPLICATE KEY UPDATE, the affected-rows value per row is 1 if the row is inserted as a
+    // new row, 2 if an existing row is updated, and 0 if an existing row is set to its current values.
+    // If you specify the CLIENT_FOUND_ROWS flag to the mysql_real_connect() C API function when connecting
+    // to mysqld, the affected-rows value is 1 (not 0) if an existing row is set to its current values."
+    return (0 < db()->command($sql, $sql_params));
   }
 
 
   // The return value (usually TRUE on success, FALSE on failure). Note this value is
   // returned internally to PHP for processing.
-  public function destroy($id)
+  public function destroy($id): bool
   {
-    $sql = "DELETE FROM " . self::$table . " WHERE id=:id";
-    $rows = db()->command($sql, array(':id' => $id));
-    return ($rows === 1);
+    try
+    {
+      $sql = "DELETE FROM " . self::$table . " WHERE id=:id";
+      db()->command($sql, array(':id' => $id));
+      return true;
+    }
+    catch (\Exception $e)
+    {
+      return false;
+    }
   }
 
 
@@ -125,4 +198,73 @@ class SessionHandlerDb implements \SessionHandlerInterface
     db()->command($sql, array(':old' => time() - $max_lifetime));
     return true;  // An exception will be thrown on error
   }
+
+
+  // Need to provide this method to circumvent a bug in some versions of PHP.
+  // See https://github.com/php/php-src/issues/9668
+  public function validateId($id) : bool
+  {
+    // Acquire a lock
+    if (!db()->mutex_lock($id))
+    {
+      trigger_error("Failed to acquire a lock", E_USER_WARNING);
+      return false;
+    }
+
+    $sql = "SELECT COUNT(*)
+              FROM " . self::$table . "
+             WHERE id=:id
+             LIMIT 1";
+
+    return (db()->query1($sql, array(':id' => $id)) == 1);
+  }
+
+
+  // We only need to provide this method because it's part of SessionUpdateTimestampHandlerInterface
+  // which we are implementing in order to provide validateId().
+  public function updateTimestamp($id, $data) : bool
+  {
+    // Acquire a lock
+    if (!db()->mutex_lock($id))
+    {
+      trigger_error("Failed to acquire a lock", E_USER_WARNING);
+      return false;
+    }
+
+    try
+    {
+      $sql = "UPDATE " . self::$table . "
+                 SET access=:access
+               WHERE id=:id";
+
+      $sql_params = array(
+          ':id' => $id,
+          ':access' => time()
+        );
+
+      $result = (1 === db()->command($sql, $sql_params));
+    }
+    catch(PDOException $e)
+    {
+      trigger_error($e->getMessage(), E_USER_WARNING);
+      $result = false;
+    }
+
+    // Release the mutex lock
+    db()->mutex_unlock($id);
+
+    return $result;
+  }
+
+}
+
+
+// Restore the original error reporting level
+if (version_compare(MRBS_MIN_PHP_VERSION, '8.0.0') < 0)
+{
+  error_reporting($old_level);
+}
+else
+{
+  trigger_error("This code can now be removed", E_USER_NOTICE);
 }

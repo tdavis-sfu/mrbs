@@ -1,35 +1,32 @@
 <?php
+declare(strict_types=1);
 namespace MRBS;
 
-use MRBS\Form\Form;
 use MRBS\Form\ElementFieldset;
 use MRBS\Form\ElementInputSubmit;
 use MRBS\Form\FieldInputDate;
 use MRBS\Form\FieldInputSearch;
 use MRBS\Form\FieldInputSubmit;
+use MRBS\Form\Form;
 
 require "defaultincludes.inc";
 
 
-function get_search_nav_button(array $hidden_inputs, $value, $disabled=false)
+function get_search_nav_button(array $hidden_inputs, string $value, bool $disabled=false) : string
 {
-  $html = '';
-
-  $form = new Form();
-  $form->setAttributes(array('action' => multisite(this_page()),
-                             'method' => 'post'));
+  $form = new Form(Form::METHOD_POST);
+  $form->setAttributes(array('action' => multisite(this_page())));
   $form->addHiddenInputs($hidden_inputs);
   $submit = new ElementInputSubmit();
   $submit->setAttributes(array('value'    => $value,
                                'disabled' => $disabled));
   $form->addElement($submit);
-  $html .= $form->toHTML();
 
-  return $html;
+  return $form->toHTML();
 }
 
 
-function generate_search_nav_html($search_pos, $total, $num_records, $search_str)
+function generate_search_nav_html(int $search_pos, int $total, int $num_records, string $search_str) : string
 {
   global $from_date;
   global $search;
@@ -69,7 +66,7 @@ function output_row($row, $returl)
 {
   global $is_ajax, $json_data, $view;
 
-  $vars = array('id'     => $row['entry_id'],
+  $vars = array('id'     => $row['id'],
                 'returl' => $returl);
 
   $query = http_build_query($vars, '', '&');
@@ -107,7 +104,7 @@ function output_row($row, $returl)
   //    add a span with the numeric start time in the title for sorting
   $values[] = "<span title=\"" . $row['start_time'] . "\"></span>" . $link;
   // description
-  $values[] = htmlspecialchars($row['description']);
+  $values[] = htmlspecialchars($row['description'] ?? '');
 
   if ($is_ajax)
   {
@@ -128,24 +125,8 @@ $search_str = get_form_var('search_str', 'string');
 $search_pos = get_form_var('search_pos', 'int');
 $total = get_form_var('total', 'int');
 $datatable = get_form_var('datatable', 'int');  // Will only be set if we're using DataTables
-// Get the start day/month/year and make them the current day/month/year
+$ics = get_form_var('ics', 'bool', false);
 $from_date = get_form_var('from_date', 'string');
-
-if (isset($from_date))
-{
-  list($year, $month, $day) = split_iso_date($from_date);
-}
-
-// If we haven't been given a sensible date then use today's
-if (!isset($day) || !isset($month) || !isset($year) || !checkdate($month, $day, $year))
-{
-  $day   = date("d");
-  $month = date("m");
-  $year  = date("Y");
-}
-
-// Reconstruct the from_date using the, possibly new, values of year/month/day
-$from_date = format_iso_date($year, $month, $day);
 
 // If we're going to be doing something then check the CSRF token
 if (isset($search_str) && ($search_str !== ''))
@@ -173,27 +154,37 @@ if (!isset($search_str))
   $search_str = '';
 }
 
-$search_start_time = mktime(0, 0, 0, $month, $day, $year);
-
-if (!$is_ajax)
+if (isset($from_date))
 {
+  if (validate_iso_date($from_date))
+  {
+    $search_start_time = DateTime::createFromFormat('Y-m-d', $from_date)->setTime(0, 0)->getTimestamp();
+  }
+  else
+  {
+    unset($from_date);  // We don't want to perpetuate invalid from dates in the form
+  }
+}
+
+if (!($is_ajax || $ics)) {
   $context = array(
-      'view'      => $view,
-      'view_all'  => $view_all,
-      'year'      => $year,
-      'month'     => $month,
-      'day'       => $day,
-      'area'      => $area,
-      'room'      => isset($room) ? $room : null
-    );
+    'view' => $view,
+    'view_all' => $view_all,
+    'year' => $year,
+    'month' => $month,
+    'day' => $day,
+    'area' => $area,
+    'room' => $room ?? null
+  );
 
   print_header($context);
 
-  $form = new Form();
-  $form->setAttributes(array('class'  => 'standard',
-                             'id'     => 'search_form',
-                             'method' => 'post',
-                             'action' => multisite(this_page())));
+  $form = new Form(Form::METHOD_POST);
+  $form->setAttributes(array(
+    'class' => 'standard',
+    'id' => 'search_form',
+    'action' => multisite(this_page()))
+  );
 
   $fieldset = new ElementFieldset();
   $fieldset->addLegend(get_vocab('search'));
@@ -201,18 +192,19 @@ if (!$is_ajax)
   // Search string
   $field = new FieldInputSearch();
   $field->setLabel(get_vocab('search_for'))
-        ->setControlAttributes(array('name'      => 'search_str',
-                                     'value'     => (isset($search_str)) ? $search_str : '',
-                                     'required'  => true,
-                                     'autofocus' => true));
+    ->setControlAttributes(array('name' => 'search_str',
+      'value' => (isset($search_str)) ? $search_str : '',
+      'required' => true,
+      'autofocus' => true));
   $fieldset->addElement($field);
 
   // From date
   $field = new FieldInputDate();
   $field->setLabel(get_vocab('from'))
-        ->setControlAttributes(array('name'      => 'from_date',
-                                     'value'     => $from_date,
-                                     'required'  => true));
+    ->setControlAttributes(array(
+        'name'  => 'from_date',
+        'value' => $from_date ?? null)
+      );
   $fieldset->addElement($field);
 
   // Submit button
@@ -224,17 +216,25 @@ if (!$is_ajax)
 
   $form->render();
 
-  if (!isset($search_str) || ($search_str === ''))
-  {
+  if (!isset($search_str) || ($search_str === '')) {
     echo "<p class=\"error\">" . get_vocab("invalid_search") . "</p>";
     print_footer();
     exit;
   }
 
   echo '<h3 class="search_results">';
-  echo get_vocab("search_results",
-                 htmlspecialchars($search_str),
-                 htmlspecialchars(utf8_strftime($strftime_format['date_short'], $search_start_time)));
+  if (isset($search_start_time))
+  {
+    echo get_vocab(
+      'search_results',
+      htmlspecialchars($search_str),
+      htmlspecialchars(datetime_format($datetime_formats['date_search'], $search_start_time))
+    );
+  }
+  else
+  {
+    echo get_vocab('search_results_unlimited', htmlspecialchars($search_str));
+  }
   echo "</h3>\n";
 }  // if (!$is_ajax)
 
@@ -277,8 +277,13 @@ foreach ($fields as $field)
   }
 }
 
-$sql_pred .= ") AND (E.end_time > ?)";
-$sql_params[] = $search_start_time;
+$sql_pred .= ')';
+
+if (isset($search_start_time))
+{
+  $sql_pred .= " AND (E.end_time > ?)";
+  $sql_params[] = $search_start_time;
+}
 
 // We only want the bookings for rooms that are visible
 $invisible_room_ids = get_invisible_room_ids();
@@ -331,7 +336,7 @@ if (!isset($total))
   $total = db()->query1($sql, $sql_params);
 }
 
-if (($total <= 0) && !$is_ajax)
+if (($total <= 0) && !($is_ajax || $ics))
 {
   echo "<p id=\"nothing_found\">" . get_vocab("nothing_found") . "</p>\n";
   print_footer();
@@ -350,11 +355,12 @@ else if($search_pos >= $total)
 // If we're Ajax capable and this is not an Ajax request then don't output
 // the table body, because that's going to be sent later in response to
 // an Ajax request - so we don't need to do the query
-if (!$ajax_capable || $is_ajax)
+if (!$ajax_capable || $is_ajax || $ics)
 {
   // Now we set up the "real" query
-  $sql = "SELECT E.id AS entry_id, E.create_by, E.name, E.description, E.start_time,
-                 E.room_id, R.area_id, A.enable_periods
+  $sql = "SELECT E.*, " .
+                db()->syntax_timestamp_to_unix("E.timestamp") . " AS last_updated, " .
+                "A.area_name, R.room_name, R.area_id, A.enable_periods
             FROM " . _tbl('entry') . " E
        LEFT JOIN " . _tbl('room') . " R
               ON E.room_id = R.id
@@ -362,9 +368,9 @@ if (!$ajax_capable || $is_ajax)
               ON R.area_id = A.id
            WHERE $sql_pred
         ORDER BY E.start_time asc";
-  // If it's an Ajax query we want everything.  Otherwise we use LIMIT to just get
+  // If it's an Ajax query or an ics export we want everything.  Otherwise we use LIMIT to just get
   // the stuff we want.
-  if (!$is_ajax)
+  if (!($is_ajax || $ics))
   {
     $sql .= " " . db()->syntax_limit($search["count"], $search_pos);
   }
@@ -374,31 +380,48 @@ if (!$ajax_capable || $is_ajax)
   $num_records = $result->count();
 }
 
-if (!$ajax_capable)
+if (!($ajax_capable || $ics))
 {
   echo generate_search_nav_html($search_pos, $total, $num_records, $search_str);
 }
 
-if (!$is_ajax)
+if (!($is_ajax || $ics))
 {
   echo "<div id=\"search_output\" class=\"datatable_container\">\n";
   echo "<table id=\"search_results\" class=\"admin_table display\"";
 
   // Put the search parameters as data attributes so that the JavaScript can use them
   echo ' data-search_str="' . htmlspecialchars($search_str) . '"';
-  echo ' data-from_date="' . htmlspecialchars($from_date) . '"';
+  if (isset($from_date))
+  {
+    echo ' data-from_date="' . htmlspecialchars($from_date) . '"';
+  }
 
   echo ">\n";
   echo "<thead>\n";
   echo "<tr>\n";
   // We give some columns a type data value so that the JavaScript knows how to sort them
-  echo "<th>" . get_vocab("namebooker") . "</th>\n";
-  echo "<th>" . get_vocab("createdby") . "</th>\n";
-  echo "<th><span class=\"normal\" data-type=\"title-numeric\">" . get_vocab("start_date") . "</span></th>\n";
-  echo "<th>" . get_vocab("description") . "</th>\n";
+  echo '<th><span class="normal" data-type="string">' . get_vocab("namebooker") . "</th>\n";
+  echo '<th><span class="normal" data-type="string">' . get_vocab("createdby") . "</th>\n";
+  echo '<th><span class="normal" data-type="title-numeric">' . get_vocab("start_date") . "</span></th>\n";
+  echo '<th><span class="normal" data-type="string">' . get_vocab("description") . "</th>\n";
   echo "</tr>\n";
   echo "</thead>\n";
   echo "<tbody>\n";
+}
+
+if ($ics)
+{
+  $filename = "$search_filename.ics";
+  $content_type = "application/ics; charset=" . get_charset() . "; name=\"$filename\"";
+  http_headers(array(
+    "Content-Type: $content_type",
+    "Content-Disposition: attachment; filename=\"$filename\"")
+  );
+  // We set $keep_private to FALSE here because we excluded all private
+  // events in the SQL query
+  export_icalendar($result, false);
+  exit;
 }
 
 // If we're Ajax capable and this is not an Ajax request then don't output
@@ -410,6 +433,7 @@ if (!$ajax_capable || $is_ajax)
 
   while (false !== ($row = $result->next_row_keyed()))
   {
+    row_cast_columns($row, 'entry');
     output_row($row, $returl);
   }
 }

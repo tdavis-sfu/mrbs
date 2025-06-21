@@ -305,7 +305,7 @@ $vocab["delete_entries"]        = "Delete entries";
 $vocab["delete_entries_warning"] = "WARNING!  This will delete all the entries matching " .
                                    "the search string.  The operation cannot be undone.  Are " .
                                    "you sure you want to continue?\n\n" .
-                                   "Total number of entries that will be deleted: ";
+                                   "Total number of entries that will be deleted: %%s"; // The % sign is escaped because the string substitution is done by JavaScript
 $vocab["delete_entries_failed"] = "The entries could not be deleted.";
 
 // Used in admin.php
@@ -330,7 +330,6 @@ $vocab["empty_name"]         = "Niste uneli ime!";
 // Used in edit_area.php and/or edit_room.php
 $vocab["editarea"]                = "Izmeni oblast";
 $vocab["change"]                  = "Promeni";
-$vocab["backadmin"]               = "Povratak na prostorije";
 $vocab["editroom"]                = "Izmeni prostoriju";
 $vocab["viewroom"]                = "Pogledaj prostoriju";
 $vocab["not_found"]               = " nije pronađena";
@@ -412,8 +411,7 @@ $vocab["about_mrbs"]         = "About MRBS";
 $vocab["database"]           = "Database";
 $vocab["system"]             = "System";
 $vocab["servertime"]         = "Server time";
-$vocab["please_contact"]     = "Please contact ";
-$vocab["for_any_questions"]  = "for any questions that aren't answered here.";
+$vocab["please_contact"]     = "Please contact %s for any questions that aren't answered here.";
 
 // Used in import.php
 $vocab["import_icalendar"]            = "Import an iCalendar file";
@@ -426,7 +424,7 @@ $vocab["import_intro"]                = "This form allows you to import an RFC 5
 $vocab["file_name"]                   = "File";
 $vocab["import"]                      = "Import";
 $vocab["upload_failed"]               = "Upload failed";
-$vocab["max_allowed_file_size"]       = "The maximum allowed file size is";
+$vocab["max_allowed_file_size"]       = "The maximum allowed file size is %s bytes";
 $vocab["no_file"]                     = "No file was uploaded";
 $vocab["badly_formed_ics"]            = "Badly formed VCALENDAR file";
 $vocab["area_room_order"]             = "Order";

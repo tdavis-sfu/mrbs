@@ -1,8 +1,8 @@
 <?php
 namespace MRBS;
 
-use MRBS\Form\Form;
 use MRBS\Form\ElementInputSubmit;
+use MRBS\Form\Form;
 
 require "defaultincludes.inc";
 
@@ -25,10 +25,9 @@ function display_buttons($row, $is_series)
   if (is_book_admin($row['room_id']))
   {
     // approve
-    $form = new Form();
+    $form = new Form(Form::METHOD_POST);
 
-    $attributes = array('action' => multisite('approve_entry_handler.php'),
-                        'method' => 'post');
+    $attributes = array('action' => multisite('approve_entry_handler.php'));
     $form->setAttributes($attributes);
 
     $hidden_inputs = array('action' => 'approve',
@@ -44,10 +43,9 @@ function display_buttons($row, $is_series)
     $form->render();
 
     // reject
-    $form = new Form();
+    $form = new Form(Form::METHOD_POST);
 
-    $attributes = array('action' => multisite("view_entry.php?$query_string"),
-                        'method' => 'post');
+    $attributes = array('action' => multisite("view_entry.php?$query_string"));
     $form->setAttributes($attributes);
 
     $hidden_inputs = array('action' => 'reject',
@@ -76,10 +74,9 @@ function display_buttons($row, $is_series)
       }
     }
 
-    $form = new Form();
+    $form = new Form(Form::METHOD_POST);
 
-    $attributes = array('action' => multisite("view_entry.php?$query_string"),
-                        'method' => 'post');
+    $attributes = array('action' => multisite("view_entry.php?$query_string"));
     $form->setAttributes($attributes);
 
     $hidden_inputs = array('action' => 'more_info',
@@ -102,10 +99,9 @@ function display_buttons($row, $is_series)
     if ($reminders_enabled  &&
         (working_time_diff(time(), $last_reminded) >= $reminder_interval))
     {
-      $form = new Form();
+      $form = new Form(Form::METHOD_POST);
 
-      $attributes = array('action' => multisite('approve_entry_handler.php'),
-                          'method' => 'post');
+      $attributes = array('action' => multisite('approve_entry_handler.php'));
       $form->setAttributes($attributes);
 
       $hidden_inputs = array('action' => 'remind',
@@ -177,7 +173,7 @@ function display_series_title_row($row)
         htmlspecialchars($row['name']) ."</a></td>\n";
 
   // create_by, area and room names
-  echo "<td>" . htmlspecialchars(get_display_name($row['create_by'])) . "</td>\n";
+  echo "<td>" . htmlspecialchars(auth()->getDisplayName($row['create_by'])) . "</td>\n";
   echo "<td>" . htmlspecialchars($row['area_name']) . "</td>\n";
   echo "<td>" . htmlspecialchars($row['room_name']) . "</td>\n";
 
@@ -207,7 +203,7 @@ function display_entry_row(array $row)
         htmlspecialchars($row['name']) ."</a></td>\n";
 
   // create_by, area and room names
-  echo "<td>" . htmlspecialchars(get_display_name($row['create_by'])) . "</td>\n";
+  echo "<td>" . htmlspecialchars(auth()->getDisplayName($row['create_by'])) . "</td>\n";
   echo "<td>" . htmlspecialchars($row['area_name']) . "</td>\n";
   echo "<td>" . htmlspecialchars($row['room_name']) . "</td>\n";
 
@@ -297,7 +293,7 @@ $rows = array();
 
 while (false !== ($row = $res->next_row_keyed()))
 {
-  if ((strcasecmp($row['create_by'], $mrbs_username) === 0) || is_book_admin($row['room_id']))
+  if ((strcasecmp_locale($row['create_by'], $mrbs_username) === 0) || is_book_admin($row['room_id']))
   {
     $rows[] = $row;
   }
