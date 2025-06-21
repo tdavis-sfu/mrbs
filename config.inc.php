@@ -85,7 +85,7 @@ $multisite = false;
 $default_site = '';
 
 $mrbs_admin = "Tracy Lee";
-$mrbs_admin_email = "tjl@sfu.ca";
+$mrbs_admin_email = "trevor_davis@sfu.ca";
 // NOTE:  there are more email addresses in $mail_settings below.    You can also give
 // email addresses in the format 'Full Name <address>', for example:
 // $mrbs_admin_email = 'Booking System <admin_email@your.org>';
@@ -222,7 +222,7 @@ $mail_settings['on_delete'] = false;  // when an entry is deleted
 $mail_settings['details'] = true;
 
 
-$auth['cas']['debug']   = true;  // Set to true to enable debug output. Disable for production.
+$auth['cas']['debug']   = false;  // Set to true to enable debug output. Disable for production.
 
 
 
