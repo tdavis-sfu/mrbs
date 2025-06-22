@@ -236,4 +236,4 @@ $db_persist = FALSE;
   
   
   
-  $maxlength['room.description'] = 200;  // characters   (description field in room table)
+  //$maxlength['room.description'] = 200;  // characters   (description field in room table)
