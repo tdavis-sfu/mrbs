@@ -235,5 +235,3 @@ $db_persist = FALSE;
   $auth['cas']['debug']   = false;  // Set to true to enable debug output. Disable for production.
   
   
-  
-  //$maxlength['room.description'] = 200;  // characters   (description field in room table)
