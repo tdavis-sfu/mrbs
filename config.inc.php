@@ -225,9 +225,9 @@ $db_persist = FALSE;
   $mail_settings['from'] = 'tjl@sfu.ca';
   $mail_settings['organizer'] = 'tjl@sfu.ca';
   $mail_settings['recipients'] = 'tjdavis@sfu.ca'; 
-  $mail_settings['admin_on_bookings']      = true;
-  $mail_settings['on_new']    = true;   // when an entry is created
-  $mail_settings['on_change'] = true;  // when an entry is changed
+  $mail_settings['admin_on_bookings'] = true;
+  $mail_settings['on_new']    = false;   // when an entry is created
+  $mail_settings['on_change'] = false;  // when an entry is changed
   $mail_settings['on_delete'] = false;  // when an entry is deleted
   $mail_settings['details'] = true;
   
