@@ -21,7 +21,7 @@ $capacity = get_form_var('capacity', 'int', null, INPUT_POST);
 $room_admin_email = get_form_var('room_admin_email', 'string', null, INPUT_POST);
 $type = get_form_var('type', 'string', null, INPUT_POST);
 
-// This file is for adding new areas/rooms
+// This file is for adding new areas/rooms test
 $error = '';
 
 // First of all check that we've got an area or room name
