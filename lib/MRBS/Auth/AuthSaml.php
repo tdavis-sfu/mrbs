@@ -1,7 +1,10 @@
 <?php
 namespace MRBS\Auth;
 
-/*
+use MRBS\User;
+
+
+/**
  * Authentication management scheme that delegates everything to a ready
  * configured SimpleSamlPhp instance.  You should use this scheme, along with
  * the session scheme with the same name, if you want your users to
@@ -11,9 +14,6 @@ namespace MRBS\Auth;
  * how to configure SAML authentication.  This authentication module on its
  * own doesn't work.
  */
-
-use MRBS\User;
-
 class AuthSaml extends Auth
 {
   public function __construct()
@@ -22,17 +22,6 @@ class AuthSaml extends Auth
   }
 
 
-  /* validateUser($user, $pass)
-   *
-   * Checks if the specified username/password pair are valid
-   *
-   * $user  - The user name
-   * $pass  - The password
-   *
-   * Returns:
-   *   false    - The pair are invalid or do not exist
-   *   string   - The validated username
-   */
   public function validateUser(
     #[\SensitiveParameter]
     ?string $user,
@@ -50,7 +39,7 @@ class AuthSaml extends Auth
   }
 
 
-  protected function getUserFresh(string $username) : ?User
+  public function getUserFresh(string $username) : ?User
   {
     $user = new User($username);
     $user->level = $this->getLevel($username);

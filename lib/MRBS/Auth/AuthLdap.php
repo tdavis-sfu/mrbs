@@ -1,13 +1,12 @@
 <?php
 namespace MRBS\Auth;
 
+use MRBS\Errors\Errors;
 use MRBS\Exception;
 use MRBS\User;
-use function MRBS\fatal_error;
 use function MRBS\get_microtime;
 use function MRBS\in_arrayi;
 use function MRBS\session;
-use function MRBS\utf8_strtolower;
 
 
 class AuthLdap extends Auth
@@ -165,7 +164,7 @@ class AuthLdap extends Auth
         {
           if (count($$item) != $count)
           {
-            fatal_error("MRBS configuration error: Count of LDAP array config variables doesn't match, aborting!");
+            Errors::fatalError("MRBS configuration error: Count of LDAP array config variables doesn't match, aborting!");
           }
         }
         else
@@ -192,17 +191,6 @@ class AuthLdap extends Auth
   }
 
 
-  /* validateUser($user, $pass)
-   *
-   * Checks if the specified username/password pair are valid
-   *
-   * $user  - The user name
-   * $pass  - The password
-   *
-   * Returns:
-   *   false    - The pair are invalid or do not exist
-   *   string   - The validated username
-   */
   public function validateUser(
     #[\SensitiveParameter]
     ?string $user,
@@ -324,7 +312,7 @@ class AuthLdap extends Auth
   }
 
 
-  protected function getUserFresh(string $username) : ?User
+  public function getUserFresh(string $username) : ?User
   {
     if (!isset($username) || ($username === ''))
     {
@@ -393,7 +381,7 @@ class AuthLdap extends Auth
     $res = @ldap_read(
         $ldap,
         $dn,
-        "(objectclass=*)",
+        "($user_search)",
         array_values($attributes),
         0,
         1
@@ -541,13 +529,13 @@ class AuthLdap extends Auth
     $filter = "($filter)";
 
     // Form the attributes
-    $username_attrib = utf8_strtolower($object['config']['ldap_user_attrib']);
+    $username_attrib = mb_strtolower($object['config']['ldap_user_attrib']);
     $attributes = array($username_attrib);
 
     // The display name attribute might not have been set in the config file
     if (isset($object['config']['ldap_name_attrib']))
     {
-      $display_name_attrib = utf8_strtolower($object['config']['ldap_name_attrib']);
+      $display_name_attrib = mb_strtolower($object['config']['ldap_name_attrib']);
       $attributes[] = $display_name_attrib;
     }
 
@@ -579,7 +567,7 @@ class AuthLdap extends Auth
       while ($attribute)
       {
         $values = ldap_get_values($ldap, $entry, $attribute);
-        $attribute = utf8_strtolower($attribute);  // ready for the comparisons
+        $attribute = mb_strtolower($attribute);  // ready for the comparisons
 
         if ($attribute == $username_attrib)
         {
@@ -615,24 +603,24 @@ class AuthLdap extends Auth
     $result = array();
 
     // Username
-    $result['username'] = utf8_strtolower($object['config']['ldap_user_attrib']);
+    $result['username'] = mb_strtolower($object['config']['ldap_user_attrib']);
 
     // The display name attribute might not have been set in the config file
     if (isset($object['config']['ldap_name_attrib']))
     {
-      $result['display_name'] = utf8_strtolower($object['config']['ldap_name_attrib']);
+      $result['display_name'] = mb_strtolower($object['config']['ldap_name_attrib']);
     }
 
     // The email address
     if ($include_email && isset($object['config']['ldap_email_attrib']))
     {
-      $result['email'] = utf8_strtolower($object['config']['ldap_email_attrib']);
+      $result['email'] = mb_strtolower($object['config']['ldap_email_attrib']);
     }
 
     // The group name attribute might not have been set in the config file
     if ($include_groups && isset($object['config']['ldap_group_member_attrib']))
     {
-      $result['groups'] = utf8_strtolower($object['config']['ldap_group_member_attrib']);
+      $result['groups'] = mb_strtolower($object['config']['ldap_group_member_attrib']);
     }
 
     return $result;
@@ -668,7 +656,7 @@ class AuthLdap extends Auth
     while ($attribute)
     {
       $values = ldap_get_values($ldap, $entry, $attribute);
-      $attribute = utf8_strtolower($attribute);  // ready for the comparisons
+      $attribute = mb_strtolower($attribute);  // ready for the comparisons
 
       if ($attribute == $attributes['username'])
       {
@@ -773,7 +761,7 @@ class AuthLdap extends Auth
               {
                 $entries = ldap_get_entries($ldap, $res);
                 $dn = $entries[0]["dn"];
-                $user_search = "distinguishedName=" . $dn;
+                $user_search = self::$all_ldap_opts['ldap_user_attrib'][$idx] . "=" . $username;
                 self::debug("found one entry dn '$dn'");
               }
               else
@@ -839,7 +827,14 @@ class AuthLdap extends Auth
 
 
   // A wrapper for ldap_bind() that optionally suppresses "invalid credentials" errors.
-  private static function ldapBind ($link_identifier, ?string $bind_rdn=null, ?string $bind_password=null) : bool
+  // The SensitiveParameter attribute needs to be on a separate line for PHP 7.
+  // The attribute is only recognised by PHP 8.2 and later.
+  private static function ldapBind (
+    $link_identifier,
+    ?string $bind_rdn=null,
+    #[\SensitiveParameter]
+    ?string $bind_password=null
+  ) : bool
   {
     global $ldap_suppress_invalid_credentials;
 

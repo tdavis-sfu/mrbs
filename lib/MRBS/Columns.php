@@ -1,8 +1,10 @@
 <?php
+declare(strict_types=1);
 namespace MRBS;
 
 use Countable;
 use Iterator;
+use MRBS\DB\DB;
 
 // Holds information about table columns
 // Implemented as a singleton class for performance reasons: it is
@@ -13,35 +15,63 @@ class Columns implements Countable, Iterator
   private static $instances = array();
   private $data;
   private $index = 0;
+  private $connection;
   private $table_name;
 
 
-  private function __construct($table_name)
+  private function __construct($table_name, DB $connection)
   {
+    assert(version_compare(MRBS_MIN_PHP_VERSION, '7.4.0', '<'), "The __wakeup() method is now redundant.");
     $this->table_name = $table_name;
+    $this->connection = $connection;
     // Get the column info
-    $this->data = db()->field_info($table_name);
+    $this->data = $this->connection->field_info($table_name);
   }
+
 
   private function __clone()
   {
   }
 
+
+  public function __unserialize(array $data) : void
+  {
+    // __unserialize() must have public visibility
+    throw new \Exception("Cannot unserialize a singleton.");
+  }
+
+
+  // __wakeup() is deprecated from PHP 8.5.
+  // "The __wakeup() serialization magic method has been deprecated. Implement __unserialize()
+  // instead (or in addition, if support for old PHP versions is necessary)".
+  // __unserialize() is only available from PHP 7.4.0
   public function __wakeup()
   {
     // __wakeup() must have public visibility
     throw new \Exception("Cannot unserialize a singleton.");
   }
 
-  public static function getInstance(string $table_name) : Columns
+
+  /**
+   * Get the singleton instance for the specified table and database connection.
+   *
+   * @param DB|null $connection  If null, the default database connection is used.
+   */
+  public static function getInstance(string $table_name, ?DB $connection=null) : Columns
   {
-    if (!isset(self::$instances[$table_name]))
+    if (!isset($connection))
     {
-      self::$instances[$table_name] = new self($table_name);
+      $connection = db();
     }
 
-    return self::$instances[$table_name];
+    if (!isset(self::$instances[$connection->dsn][$table_name]))
+    {
+      self::$instances[$connection->dsn][$table_name] = new self($table_name, $connection);
+    }
+
+    return self::$instances[$connection->dsn][$table_name];
   }
+
 
   public function getNames() : array
   {
@@ -63,7 +93,7 @@ class Columns implements Countable, Iterator
   }
 
 
-  public function getColumnByName($name) : ?Column
+  public function getColumnByName(string $name) : ?Column
   {
     foreach ($this as $column)
     {
@@ -102,6 +132,9 @@ class Columns implements Countable, Iterator
         break;
       case 'integer':
         $column->setNature(Column::NATURE_INTEGER);
+        break;
+      case 'json':
+        $column->setNature(Column::NATURE_JSON);
         break;
       case 'real':
         $column->setNature(Column::NATURE_REAL);

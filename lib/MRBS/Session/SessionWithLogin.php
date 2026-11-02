@@ -18,10 +18,10 @@ use function MRBS\multisite;
 use function MRBS\print_footer;
 use function MRBS\print_header;
 use function MRBS\this_page;
-use function MRBS\utf8_strpos;
 
-
-// An abstract class for those session schemes that implement a login form
+/**
+ * An abstract class for those session schemes that implement a login form.
+ */
 abstract class SessionWithLogin extends Session
 {
   protected $form = array();
@@ -31,15 +31,22 @@ abstract class SessionWithLogin extends Session
   {
     parent::__construct();
 
-    // Get non-standard form variables
-    foreach (array('action', 'username', 'password', 'returl') as $var)
+    // Get the non-standard form variables
+    $vars = [
+      'action' => 'string',
+      'username' => 'string',
+      'password' => 'string',
+      'returl' => 'url_local'
+    ];
+
+    foreach ($vars as $var => $type)
     {
-      $this->form[$var] = get_form_var($var, 'string', null, INPUT_POST);
+      $this->form[$var] = get_form_var($var, $type, null, INPUT_POST);
     }
 
     // Allow the target_url to be a GET or POST value to help password managers (the target_url can
     // be stored as a query string parameter in the password manager).
-    $this->form['target_url'] = get_form_var('target_url');
+    $this->form['target_url'] = get_form_var('target_url', 'url_local');
 
     if (isset($this->form['username']))
     {
@@ -136,7 +143,7 @@ abstract class SessionWithLogin extends Session
           if (!empty($this->form['returl']))
           {
             // check to see whether there's a query string already
-            $this->form['target_url'] .= (utf8_strpos($this->form['target_url'], '?') === false) ? '?' : '&';
+            $this->form['target_url'] .= (mb_strpos($this->form['target_url'], '?') === false) ? '?' : '&';
             $this->form['target_url'] .= 'returl=' . urlencode($this->form['returl']);
           }
         }
@@ -166,11 +173,6 @@ abstract class SessionWithLogin extends Session
 
 
   protected function logonUser(string $username) : void
-  {
-  }
-
-
-  public function logoffUser() : void
   {
   }
 

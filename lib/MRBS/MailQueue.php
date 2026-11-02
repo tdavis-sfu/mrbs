@@ -1,9 +1,9 @@
 <?php
+declare(strict_types=1);
 namespace MRBS;
 
 use Mail_mimePart;
 use PHPMailer\PHPMailer\Exception;
-use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\SMTP;
 
 require_once MRBS_ROOT . '/functions_mail.inc';
@@ -88,19 +88,25 @@ class MailQueue
   }
 
 
+  /**
+   * Get the number of recipients in the addresses array.
+   */
   protected static function getNRecipients(array $addresses) : int
   {
-    if (empty($addresses))
+    $result = 0;
+
+    if (!empty($addresses))
     {
-      return 0;
+      foreach (['to', 'cc', 'bcc'] as $key)
+      {
+        if (!empty($addresses[$key]))
+        {
+          $result += count(parse_addresses($addresses[$key]));
+        }
+      }
     }
 
-    $recipients = (!empty($addresses['to'])) ? $addresses['to'] : '';
-    $recipients .= (!empty($addresses['cc'])) ? ',' . $addresses['cc'] : '';
-    $recipients .= (!empty($addresses['bcc'])) ? ',' . $addresses['bcc'] : '';
-    $parsed_addresses = PHPMailer::parseAddresses($recipients, true, get_mail_charset());
-
-    return count($parsed_addresses);
+    return $result;
   }
 
 
@@ -152,7 +158,7 @@ class MailQueue
     static $last_mail_sent = null;
     static $last_n_addresses = null;
 
-    $mail = new PHPMailer();
+    $mail = new Mailer($mail_settings, $sendmail_settings, $smtp_settings);
 
     mail_debug("Preparing to send email ...");
     if ($mail_settings['debug'])
@@ -175,65 +181,12 @@ class MailQueue
       }
     }
 
-    switch ($mail_settings['admin_backend'])
-    {
-      case 'mail':
-        $mail->isMail();
-        break;
-      case 'qmail':
-        $mail->isQmail();
-        if (isset($mail_settings['qmail']['qmail-inject-path']))
-        {
-          $mail->Sendmail = $mail_settings['qmail']['qmail-inject-path'];
-        }
-        break;
-      case 'sendmail':
-        $mail->isSendmail();
-        $mail->Sendmail = $sendmail_settings['path'];
-        if (isset($sendmail_settings['args']) && ($sendmail_settings['args'] !== ''))
-        {
-          $mail->Sendmail .= ' ' . $sendmail_settings['args'];
-        }
-        break;
-      case 'smtp':
-        $mail->isSMTP();
-        $mail->Host = $smtp_settings['host'];
-        $mail->Port = $smtp_settings['port'];
-        $mail->SMTPAuth = $smtp_settings['auth'];
-        $mail->SMTPSecure = $smtp_settings['secure'];
-        $mail->Username = $smtp_settings['username'];
-        $mail->Password = $smtp_settings['password'];
-        $mail->Hostname = $smtp_settings['hostname'];
-        $mail->Helo = $smtp_settings['helo'];
-        if ($smtp_settings['disable_opportunistic_tls'])
-        {
-          $mail->SMTPAutoTLS = false;
-        }
-        $mail->SMTPOptions = array
-        (
-          'ssl' => array
-          (
-            'verify_peer' => $smtp_settings['ssl_verify_peer'],
-            'verify_peer_name' => $smtp_settings['ssl_verify_peer_name'],
-            'allow_self_signed' => $smtp_settings['ssl_allow_self_signed']
-          )
-        );
-        break;
-      default:
-        $mail->isMail();
-        trigger_error("Unknown mail backend '" . $mail_settings['admin_backend'] . "'." .
-          " Defaulting to 'mail'.",
-          E_USER_WARNING);
-        break;
-    }
-
-    $mail->CharSet = get_mail_charset();  // PHPMailer defaults to 'iso-8859-1'
+    $mail->CharSet = Language::MAIL_CHARSET;  // PHPMailer defaults to 'iso-8859-1'
     $mail->AllowEmpty = true;  // remove this for production
-    $mail->addCustomHeader('Auto-Submitted', 'auto-generated');
 
     if (!empty($addresses['reply_to']))
     {
-      $reply_to_addresses = PHPMailer::parseAddresses($addresses['reply_to'], true, get_mail_charset());
+      $reply_to_addresses = parse_addresses($addresses['reply_to']);
       foreach ($reply_to_addresses as $reply_to_address)
       {
         $mail->addReplyTo($reply_to_address['address'], $reply_to_address['name']);
@@ -242,11 +195,11 @@ class MailQueue
 
     if (isset($addresses['from']))
     {
-      $from_addresses = PHPMailer::parseAddresses($addresses['from'], true, get_mail_charset());
+      $from_addresses = parse_addresses($addresses['from']);
       $mail->setFrom($from_addresses[0]['address'], $from_addresses[0]['name']);
     }
 
-    $to_addresses = PHPMailer::parseAddresses($addresses['to'], true, get_mail_charset());
+    $to_addresses = parse_addresses($addresses['to']);
     foreach ($to_addresses as $to_address)
     {
       $mail->addAddress($to_address['address'], $to_address['name']);
@@ -254,7 +207,7 @@ class MailQueue
 
     if (isset($addresses['cc']))
     {
-      $cc_addresses = PHPMailer::parseAddresses($addresses['cc'], true, get_mail_charset());
+      $cc_addresses = parse_addresses($addresses['cc']);
       foreach ($cc_addresses as $cc_address)
       {
         // for cases where the mail server refuses to send emails with cc set, put the cc addresses on the to line
@@ -272,7 +225,7 @@ class MailQueue
 
     if (isset($addresses['bcc']))
     {
-      $bcc_addresses = PHPMailer::parseAddresses($addresses['bcc'], true, get_mail_charset());
+      $bcc_addresses = parse_addresses($addresses['bcc']);
       foreach ($bcc_addresses as $bcc_address)
       {
         $mail->addBCC($bcc_address['address'], $bcc_address['name']);
@@ -430,7 +383,7 @@ class MailQueue
 
       $disabled_functions = ini_get('disable_functions');
 
-      if (!empty($disabled_functions) && (utf8_strpos($disabled_functions, 'escapeshell') !== FALSE)  &&
+      if (!empty($disabled_functions) && (mb_strpos($disabled_functions, 'escapeshell') !== FALSE)  &&
         in_array($mail_settings['admin_backend'], array('mail', 'sendmail')))
       {
         $message = "Your PHP system has one or both of the escapeshellarg() and escapeshellcmd() functions " .

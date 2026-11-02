@@ -16,7 +16,7 @@ function print_head(bool $simple=false) : void
 
   echo "<head>\n";
 
-  echo "<meta charset=\"" . get_charset() . "\">\n";
+  echo "<meta charset=\"" . Language::MRBS_CHARSET . "\">\n";
 
   // Set IE=edge so that IE10 will display MRBS properly, even if compatibility mode is used
   // on the browser.  If we don't do this then MRBS will treat IE10 as an unsupported browser
@@ -33,7 +33,7 @@ function print_head(bool $simple=false) : void
   if (!$simple)
   {
     // Add the CSRF token so that JavaScript can use it
-    echo "<meta name=\"csrf_token\" content=\"" . htmlspecialchars(Form::getToken()) . "\">\n";
+    echo "<meta name=\"csrf_token\" content=\"" . escape_html(Form::getToken()) . "\">\n";
   }
 
   echo "<meta name=\"robots\" content=\"noindex, nofollow, noarchive\">\n";
@@ -76,7 +76,7 @@ function print_header_site_info() : void
     echo "<div class=\"logo\">\n";
     if (!empty($mrbs_company_url))
     {
-      echo '<a href="' . htmlspecialchars($mrbs_company_url) . '">';
+      echo '<a href="' . escape_html($mrbs_company_url) . '">';
     }
     // Suppress error messages in case the logo is a URL, in which case getimagesize() can
     // fail for any number of reasons, eg (a) allow_url_fopen is not enabled in php.ini or
@@ -85,7 +85,7 @@ function print_header_site_info() : void
     // size is not essential we'll just carry on.
     $logo_size = @getimagesize($mrbs_company_logo);
     echo '<img src="' . $mrbs_company_logo . '"';
-    echo ' alt="' . htmlspecialchars($mrbs_company) . '"';
+    echo ' alt="' . escape_html($mrbs_company) . '"';
     if (is_array($logo_size))
     {
       echo ' ' . $logo_size[3];
@@ -103,20 +103,20 @@ function print_header_site_info() : void
   echo "<div class=\"company\">\n";
   if (!empty($mrbs_company_url))
   {
-    echo '<a href="' . htmlspecialchars($mrbs_company_url) . '">';
+    echo '<a href="' . escape_html($mrbs_company_url) . '">';
   }
-  echo '<span>' . htmlspecialchars($mrbs_company) . '</span>';
+  echo '<span>' . escape_html($mrbs_company) . '</span>';
   if (!empty($mrbs_company_url))
   {
     echo "</a>\n";
   }
   if (!empty($mrbs_company_more_info))
   {
-    // Do not put $mrbs_company_more_info through htmlspecialchars() as it is
+    // Do not put $mrbs_company_more_info through escape_html() as it is
     // trusted and allowed to contain HTML.
     echo "<span class=\"company_more_info\">$mrbs_company_more_info</span>\n";
   }
-  echo '<a href="' . htmlspecialchars(multisite('index.php')) . '">' . get_vocab('mrbs') . "</a>\n";
+  echo '<a href="' . escape_html(multisite('index.php')) . '">' . get_vocab('mrbs') . "</a>\n";
   echo "</div>\n";
 }
 
@@ -156,11 +156,15 @@ function print_goto_date(array $context) : void
   }
 
   $input = new ElementInputDate();
-  $input->setAttributes(array('name'        => 'page_date',
-                              'value'       => format_iso_date($context['year'], $context['month'], $context['day']),
-                              'aria-label'  => get_vocab('goto'),
-                              'required'    => true,
-                              'data-submit' => $form_id));
+  // Add the 'navigation' class so that the JavaScript knows it can use hidden days
+  $input->setAttributes(array(
+    'name'        => 'page_date',
+    'value'       => format_iso_date($context['year'], $context['month'], $context['day']),
+    'class'       => 'navigation',
+    'aria-label'  => get_vocab('goto'),
+    'required'    => true,
+    'data-submit' => $form_id)
+  );
 
   $form->addElement($input);
 
@@ -200,7 +204,7 @@ function print_outstanding(string $query) : void
     {
       $url .= "?$query";
     }
-    echo '<a href="' . htmlspecialchars(multisite($url)) . '"' .
+    echo '<a href="' . escape_html(multisite($url)) . '"' .
          " class=\"$class\"" .
          ' title="' . get_vocab('outstanding', $n_outstanding) .
          "\">$n_outstanding</a>\n";
@@ -223,7 +227,7 @@ function print_menu_items(string $query) : void
 
   $menu_items['rooms'] = 'admin.php';
 
-  if ($auth['type'] == 'db')
+  if (auth()->canCreateUsers())
   {
     $menu_items['user_list'] = 'edit_users.php';
   }
@@ -238,7 +242,7 @@ function print_menu_items(string $query) : void
       {
         $url .= "?$query";
       }
-      echo '<a href="' . htmlspecialchars(multisite($url)) . '">' . get_vocab($token) . "</a>\n";
+      echo '<a href="' . escape_html(multisite($url)) . '">' . get_vocab($token) . "</a>\n";
     }
   }
 }
@@ -324,7 +328,7 @@ function print_report_link(User $user) : void
   }
   else
   {
-    echo '<span>' . htmlspecialchars($user->display_name) . '</span>';
+    echo '<span>' . escape_html($user->display_name) . '</span>';
     return;
   }
 
@@ -479,7 +483,7 @@ function print_banner(?array $context, $simple=false, $omit_login=false) : void
         defined('MB_CASE_UPPER'))
     {
       $url = multisite(url_base() . "/index.php?$query");
-      echo '<nav class="qr" title="' . htmlspecialchars($url) . "\">\n";
+      echo '<nav class="qr" title="' . escape_html($url) . "\">\n";
       $options = new QROptions([
         'outputType'  => QRCode::OUTPUT_MARKUP_SVG,
         'imageBase64' => false,
@@ -579,7 +583,15 @@ function print_theme_header(?array $context=null, bool $simple=false, bool $omit
 
     // Put some data attributes in the body element for the benefit of JavaScript.  Note that we
     // cannot use these PHP variables directly in the JavaScript files as those files are cached.
-    $data = array(
+
+    // Get the language preferences
+    $lang_preferences = Language::getInstance()->getPreferences();
+    // Add to the beginning of the list the best fit locale (which may not necessarily have been the first choice)
+    array_unshift($lang_preferences, mb_strtolower(Language::getInstance()->getWebLocale()));
+    // Remove duplicates and renumber keys
+    $lang_preferences = array_values(array_unique($lang_preferences));
+
+    $data = [
       'view'          => $context['view'],
       'view_all'      => $context['view_all'],
       'area'          => $context['area'],
@@ -588,8 +600,8 @@ function print_theme_header(?array $context=null, bool $simple=false, bool $omit
       'page-date'     => format_iso_date($context['year'], $context['month'], $context['day']),
       'is-admin'      => (is_admin()) ? 'true' : 'false',
       'is-book-admin' => (is_book_admin()) ? 'true' : 'false',
-      'lang-prefs'    => json_encode(get_lang_preferences())
-    );
+      'lang-prefs'    => json_encode($lang_preferences)
+    ];
 
     if ($multisite && isset($site) && ($site !== ''))
     {
@@ -634,28 +646,34 @@ function print_theme_header(?array $context=null, bool $simple=false, bool $omit
 
   }
 
-  $headers = array("Content-Type: text/html; charset=" . get_charset());
+  $headers = array("Content-Type: text/html; charset=" . Language::MRBS_CHARSET);
   http_headers($headers);
 
   echo DOCTYPE . "\n";
 
   // We produce two <html> tags: one for versions of IE that we don't support and one for all
   // other browsers.  This enables us to use CSS to hide and show the appropriate text.
+  $mrbs_lang = Language::getInstance()->getWebLang();
   echo "<!--[if lte IE 9]>\n";
-  echo "<html lang=\"" . htmlspecialchars(get_mrbs_lang()) . "\" class=\"unsupported_browser\">\n";
+  echo "<html lang=\"" . escape_html($mrbs_lang) . "\" class=\"unsupported_browser\">\n";
   echo "<![endif]-->\n";
   echo "<!--[if (!IE)|(gt IE 9)]><!-->\n";
-  echo "<html lang=\"" . htmlspecialchars(get_mrbs_lang()) . "\">\n";
+  echo "<html lang=\"" . escape_html($mrbs_lang) . "\">\n";
   echo "<!--<![endif]-->\n";
 
   print_head($simple);
 
-  echo '<body class="' . htmlspecialchars(implode(' ', $classes)) . '"';
+  echo '<body class="' . escape_html(implode(' ', $classes)) . '"';
   foreach ($data as $key => $value)
   {
     if (isset($value))
     {
-      echo " data-$key=\"" . htmlspecialchars((string)$value) . '"';
+      // Convert booleans to 0 or 1
+      if (is_bool($value))
+      {
+        $value = (int)$value;
+      }
+      echo " data-$key=\"" . escape_html($value) . '"';
     }
   }
   echo ">\n";

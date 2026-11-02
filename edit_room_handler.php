@@ -46,32 +46,13 @@ $fields = db()->field_info(_tbl('room'));
 // Get any custom fields
 foreach($fields as $field)
 {
-  switch($field['nature'])
-  {
-    case 'character':
-      $type = 'string';
-      break;
-    case 'integer':
-      // Smallints and tinyints are considered to be booleans
-      $type = (isset($field['length']) && ($field['length'] <= 2)) ? 'string' : 'int';
-      break;
-    // We can only really deal with the types above at the moment
-    default:
-      $type = 'string';
-      break;
-  }
   $var = VAR_PREFIX . $field['name'];
-  $$var = get_form_var($var, $type);
-  if (($type == 'int') && ($$var === ''))
+  $$var = get_form_var($var, get_form_var_type($field));
+
+  // Cast booleans to ints (0 or 1) for insertion into the database
+  if (is_bool($$var))
   {
-    unset($$var);
-  }
-  // Turn checkboxes into booleans
-  if (($field['nature'] == 'integer') &&
-      isset($field['length']) &&
-      ($field['length'] <= 2))
-  {
-    $$var = (empty($$var)) ? 0 : 1;
+    $$var = intval($$var);
   }
 
   // Trim any strings and truncate them to the maximum field length
@@ -92,7 +73,7 @@ if (empty($capacity))
 // -------------------
 
 // Initialise the error array
-$errors = array();
+$errors = [];
 
 // Clean up the address list replacing newlines by commas and removing duplicates
 $room_admin_email = clean_address_list($room_admin_email);
@@ -115,42 +96,52 @@ else
 
 if (empty($errors))
 {
-  // Used purely for the syntax_casesensitive_equals() call below, and then ignored
-  $sql_params = array();
+  try
+  {
+    // Start a transaction
+    db()->begin();
 
-  // Start a transaction
-  db()->begin();
-
-  // Check the new area still exists
-  $sql = "SELECT id
+    // Check the new area still exists
+    $sql = "SELECT id
             FROM " . _tbl('area') . "
            WHERE id=?
            LIMIT 1
       FOR UPDATE";  // lock this row
 
-  if (db()->query1($sql, array($new_area)) < 1)
-  {
-    $errors[] = 'invalid_area';
-    db()->rollback();
-  }
-  // If so, check that the room name is not already used in the area
-  // (only do this if you're changing the room name or the area - if you're
-  // just editing the other details for an existing room we don't want to reject
-  // the edit because the room already exists!)
-  elseif ( (($new_area != $old_area) || ($room_name != $old_room_name))
-          && db()->query1("SELECT id
-                                 FROM " . _tbl('room') . "
-                                WHERE room_name=:room_name
-                                  AND area_id=:area_id
-                                LIMIT 1
-                           FOR UPDATE", array(":room_name" => $room_name, ":area_id" => $new_area)) > 0)
-  {
-    $errors[] = 'invalid_room_name';
-    db()->rollback();
-  }
-  // If everything is still OK, update the database
-  else
-  {
+    if (db()->query1($sql, array($new_area)) < 1)
+    {
+      $error_tag = 'invalid_area';
+      $errors[] = $error_tag;
+      throw new Exception(get_vocab($error_tag));
+    }
+
+    // Check that the room name is not already used in the area, unless it's the same area and the same room name.
+    // Remember that the standard collation for room name is case-insensitive, so changing the case of a room in the
+    // same area does not count as a duplicate.
+    $sql = "SELECT id
+              FROM " . _tbl('room') . "
+             WHERE ((:area_id<>:old_area_id) OR (:area_id=:old_area_id AND room_name<>:old_room_name))
+               AND room_name=:room_name
+               AND area_id=:area_id
+             LIMIT 1
+        FOR UPDATE";
+
+    $sql_params = [
+      ':area_id' => $new_area,
+      ':old_area_id' => $old_area,
+      ':room_name' => $room_name,
+      ':old_room_name' => $old_room_name
+    ];
+
+    if (db()->query1($sql, $sql_params) > 0)
+    {
+      $error_tag = 'invalid_room_name';
+      $errors[] = $error_tag;
+      throw new Exception(get_vocab($error_tag));
+    }
+
+    // If everything is still OK, update the database
+
     // Convert booleans into 0/1 (necessary for PostgreSQL)
     $room_disabled = (!empty($room_disabled)) ? 1 : 0;
     $sql = "UPDATE " . _tbl('room') . " SET ";
@@ -162,7 +153,7 @@ if (empty($errors))
       {
         switch ($field['name'])
         {
-          // first of all deal with the standard MRBS fields
+          // First, deal with the standard MRBS fields
           case 'area_id':
             $assign_array[] = "area_id=?";
             $sql_params[] = $new_area;
@@ -199,7 +190,7 @@ if (empty($errors))
             $assign_array[] = "custom_html=?";
             $sql_params[] = $custom_html;
             break;
-          // then look at any user defined fields
+          // Then look at any user-defined fields
           default:
             $var = VAR_PREFIX . $field['name'];
             switch ($field['nature'])
@@ -235,8 +226,17 @@ if (empty($errors))
     location_header("admin.php?day=$day&month=$month&year=$year&area=$new_area&room=$room");
   }
 
-}
+  catch (\Exception $e)
+  {
+    db()->rollback();
+    // If the exception was caused by something unexpected, ie something other than a validation error, re-throw it.
+    if (empty($errors))
+    {
+      throw $e;
+    }
+  }
 
+}
 
 // Go back to the room form with errors
 $query_string = "area=$old_area&room=$room";

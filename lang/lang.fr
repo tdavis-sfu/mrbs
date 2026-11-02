@@ -24,7 +24,10 @@ $vocab["outstanding"]        = "%d réservations en attente";
 $vocab["bookingsfor"]        = "Réservations pour";
 $vocab["bookingsforpost"]    = "";
 $vocab["areas"]              = "Lieux";
-$vocab["today"]              = "Aujourd'hui";
+$vocab["now_day"]            = "Aujourd'hui";
+$vocab["now_week"]           = "Aujourd'hui";
+$vocab["now_month"]          = "Aujourd'hui";
+$vocab["now_year"]           = "Aujourd'hui";
 $vocab["daybefore"]          = "Jour précédent";
 $vocab["dayafter"]           = "Jour suivant";
 $vocab["gototoday"]          = "Aujourd'hui";
@@ -32,6 +35,7 @@ $vocab["goto"]               = "Afficher";
 $vocab["nav_day"]            = "Jour";
 $vocab["nav_week"]           = "Semaine";
 $vocab["nav_month"]          = "Mois";
+$vocab["nav_year"]           = "Année";
 $vocab["highlight_line"]     = "Surligner cette ligne";
 $vocab["click_to_reserve"]   = "Cliquer sur la cellule pour réserver.";
 $vocab["timezone"]           = "Fuseau horaire";
@@ -41,6 +45,9 @@ $vocab["gotothisweek"]       = "Semaine actuelle";
 $vocab["monthbefore"]        = "Mois précédent";
 $vocab["monthafter"]         = "Mois suivant";
 $vocab["gotothismonth"]      = "Mois actuel";
+$vocab["yearbefore"]         = "Année précédente";
+$vocab["yearafter"]          = "Année suivante";
+$vocab["gotothisyear"]       = "Année actuelle";
 $vocab["no_rooms_for_area"]  = "Aucune salle n'est définie pour ce lieu";
 $vocab["loading"]            = "Chargement";
 $vocab["saving"]             = "Enregistrement";
@@ -62,6 +69,7 @@ $vocab["cancel"]             = "Annuler";
 $vocab["viewday"]            = "Afficher par jour";
 $vocab["viewweek"]           = "Afficher par semaine";
 $vocab["viewmonth"]          = "Afficher par mois";
+$vocab["viewyear"]           = "Afficher par année";
 $vocab["ppreview"]           = "Format imprimable";
 
 // Used in edit_entry.php
@@ -78,14 +86,14 @@ $vocab["end"]                = "Fin";
 $vocab["start_date"]         = "Date de début";
 $vocab["end_date"]           = "Date de fin";
 $vocab["time"]               = "Heure";
-$vocab["period"]             = "Période";
+$vocab["period_title"]       = "Période";
 $vocab["unknown_period"]     = "<Période %d>";
 $vocab["duration"]           = "Durée";
-$vocab["second_lc"]          = "seconde";
+$vocab["second"]             = "seconde";
 $vocab["seconds"]            = "secondes";
-$vocab["minute_lc"]          = "minute";
+$vocab["minute"]             = "minute";
 $vocab["minutes"]            = "minutes";
-$vocab["hour_lc"]            = "heure";
+$vocab["hour"]               = "heure";
 $vocab["hours"]              = "heures";
 $vocab["day"]                = "jour";
 $vocab["days"]               = "jours";
@@ -93,9 +101,9 @@ $vocab["week"]               = "semaine";
 $vocab["weeks"]              = "semaines";
 $vocab["month"]              = "mois";
 $vocab["months"]             = "mois";
-$vocab["year_lc"]            = "année";
+$vocab["year"]               = "année";
 $vocab["years"]              = "années";
-$vocab["period_lc"]          = "période";
+$vocab["period"]             = "période";
 $vocab["periods"]            = "périodes";
 $vocab["all_day"]            = "Journée entière";
 $vocab["area"]               = "Lieu";
@@ -133,7 +141,7 @@ $vocab["brief_description"]  = "la description brève.";
 $vocab["status"]             = "Statut";
 $vocab["public"]             = "Publique";
 $vocab["private"]            = "Privé";
-$vocab["unavailable"]        = "Indisponible";
+$vocab["unavailable"]        = "[Indisponible]";
 $vocab["is_mandatory_field"] = "est un champ obligatoire, merci d'entrer une valeur";
 $vocab["missing_mandatory_field"] = "Vous n'avez pas fourni de valeur pour un champ obligatoire";
 $vocab["confirmed"]          = "Confirmé";
@@ -244,7 +252,7 @@ $vocab["min_delete_time_before"]  = 'Vous ne pouvez pas modifier ni supprimer un
 $vocab["max_delete_time_before"]  = 'Vous ne pouvez pas modifier ni supprimer une réservation qui se termine dans plus de %1$d %2$s';
 $vocab["earliest_booking_date"]   = "La première date de réservation possible est %s";
 $vocab["latest_booking_date"]     = "La dernière date de réservation possible est %s";
-$vocab["max_booking_duration"]    = "La durée maximale d'une réservation est";
+$vocab["max_booking_duration"]    = 'La durée maximale d\'une réservation est %1$d %2$s';
 $vocab["max_per_day_global"]      = "Le nombre global maximal de réservations par jour et utilisateur est de";
 $vocab["max_per_week_global"]     = "Le nombre global maximal de réservations par semaine et utilisateur est de";
 $vocab["max_per_month_global"]    = "Le nombre global maximal de réservations par mois et utilisateur est de";
@@ -398,7 +406,7 @@ $vocab["delete_entries"]        = "Supprimer des réservations";
 $vocab["delete_entries_warning"] = "ATTENTION!  Cette action va supprimer les réservations " .
                                    "correspondantes à la recherche.  Cette opération n'est pas REVERSIBLE !!! " .
                                    "Êtes-vous sûr(e) de vouloir supprimer les réservations ?\n\n" .
-                                   "Nombre de réservations à supprimer définitivement : %%s"; // The % sign is escaped because the string substitution is done by JavaScript
+                                   "Nombre de réservations à supprimer définitivement : %s";
 $vocab["delete_entries_failed"] = "Les réservations ne peuvent pas être supprimées.";
 
 // Used in admin.php
@@ -518,7 +526,7 @@ $vocab["name_not_unique"]    = "existe déjà. Choissez un autre nom.";
 
 // Used in del.php
 $vocab["deletefollowing"]    = "Vous allez supprimer les réservations suivantes";
-$vocab["and_n_more"]         = "et %s en plus";  // %s rather than %d because n is the output of number_format()
+$vocab["and_n_more"]         = "et %s en plus";  // %s rather than %d because n is the output of NumberFormatter::format()
 $vocab["sure"]               = "Êtes-vous certains&nbsp;?";
 $vocab["YES"]                = "OUI";
 $vocab["NO"]                 = "NON";

@@ -2,6 +2,7 @@
 declare(strict_types=1);
 namespace MRBS;
 
+use MRBS\DB\DBException;
 use MRBS\Form\ElementInputSubmit;
 use MRBS\Form\Form;
 
@@ -135,7 +136,7 @@ if ($type == "room")
         foreach ($entries as $entry)
         {
           $interval = new EntryInterval($entry['start_time'], $entry['end_time'], $enable_periods);
-          echo "<li>" . htmlspecialchars($entry['name']) . " (" . $interval . ")</li>\n";
+          echo "<li>" . escape_html($entry['name']) . " (" . $interval . ")</li>\n";
         }
 
         echo "</ul>\n";
@@ -144,7 +145,8 @@ if ($type == "room")
       if ($n_entries > $limit)
       {
         echo "<p>";
-        echo get_vocab("and_n_more", number_format_locale($n_entries - $limit)) . '.';
+        $formatter = new \NumberFormatter(Language::getInstance()->getWebLocale(), \NumberFormatter::DEFAULT_STYLE);
+        echo get_vocab("and_n_more", $formatter->format($n_entries - $limit)) . '.';
         echo "</p>";
       }
     }
@@ -189,7 +191,7 @@ if ($type == "area")
     echo get_vocab("delarea");
     $query_vars = array('area' => $area);
     $query = http_build_query($query_vars, '', '&');
-    echo '<a href="' . htmlspecialchars(multisite("admin.php?$query")) . '">' . get_vocab('back') . '</a>';
+    echo '<a href="' . escape_html(multisite("admin.php?$query")) . '">' . get_vocab('back') . '</a>';
     echo "</p>\n";
     print_footer();
     exit;

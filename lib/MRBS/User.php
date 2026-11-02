@@ -1,4 +1,5 @@
 <?php
+declare(strict_types=1);
 namespace MRBS;
 
 
@@ -106,7 +107,7 @@ class User
     }
 
     $mailer = new PHPMailer();
-    $mailer->CharSet = get_mail_charset();
+    $mailer->CharSet = Language::MAIL_CHARSET;
 
     // Note that addrFormat() returns a MIME-encoded address
     return $mailer->addrFormat(array($this->email, $this->display_name));
@@ -129,9 +130,9 @@ class User
       if (isset($mail_settings['username_suffix']) && ($mail_settings['username_suffix'] !== ''))
       {
         $suffix = $mail_settings['username_suffix'];
-        if (substr($this->email, -strlen($suffix)) === $suffix)
+        if (mb_substr($this->email, -mb_strlen($suffix)) === $suffix)
         {
-          $this->email = substr($this->email, 0, -strlen($suffix));
+          $this->email = mb_substr($this->email, 0, -mb_strlen($suffix));
         }
       }
 
@@ -143,6 +144,12 @@ class User
         // compatibility.
         $domain = ltrim($mail_settings['domain'], '@');
         $this->email .= '@' . $domain;
+      }
+
+      // Validate the resulting email address
+      if (!validate_email($this->email))
+      {
+        $this->email = null;
       }
     }
   }

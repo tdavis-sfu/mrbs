@@ -11,6 +11,7 @@ class DateTime extends \DateTime
   private static $isHoliday = array();
   private static $validHolidays = array();
 
+  public const ISO8601_DATE = 'Y-m-d';
   private const HOLIDAY_RANGE_OPERATOR = '..';
 
 
@@ -90,7 +91,14 @@ class DateTime extends \DateTime
   }
 
 
-  // TODO: replace usages of byday_to_day() with this method
+  // Tests whether this is the first day of the week in the locale.
+  // If $locale is null, the default locale will be used.
+  public function isFirstDayOfWeek(?string $locale = null) : bool
+  {
+    return ($this->getDayOfWeek() === self::firstDayOfWeek($this->getTimezone()->getName(), $locale));
+  }
+
+
   // TODO: make $relative an object?
   // Sets the day to $relative, where relative is an RFC5545 relative day,
   // eg "-2SU".  Returns FALSE if the relative day doesn't exist in this
@@ -129,6 +137,78 @@ class DateTime extends \DateTime
   }
 
 
+  // Sets the time to the start of the first slot of the day
+  public function setStartFirstSlot() : self
+  {
+    global $morningstarts, $morningstarts_minutes, $enable_periods;
+
+    if ($enable_periods)
+    {
+      return $this->setTime(12, 0);
+    }
+
+    return $this->setTime($morningstarts, $morningstarts_minutes);
+  }
+
+
+  // Sets the time to the start of the last slot of the day.
+  // (Note that if the booking day extends beyond midnight, then this will
+  // be on the next day.)
+  public function setStartLastSlot() : self
+  {
+    global $morningstarts, $morningstarts_minutes, $eveningends, $eveningends_minutes, $enable_periods, $periods;
+
+    if ($enable_periods)
+    {
+      return $this->setTime(12, count($periods) - 1);
+    }
+
+    // Work out if $evening_ends is really on the next day
+    if (hm_before(
+      ['hours' => $eveningends, 'minutes' => $eveningends_minutes],
+      ['hours' => $morningstarts, 'minutes' => $morningstarts_minutes])
+    )
+    {
+      $this->modify('+1 day');
+    }
+
+    return $this->setTime($eveningends, $eveningends_minutes);
+  }
+
+
+  // Sets the time to the end of the last slot of the day.
+  // (Note that if the booking day extends beyond midnight, then this will
+  // be on the next day.)
+  public function setEndLastSlot() : self
+  {
+    global $resolution;
+
+    $this->setStartLastSlot();
+    $this->modify("+$resolution seconds");
+
+    return $this;
+  }
+
+
+  /**
+   * Set the time, given as HH:MM.
+   *
+   * @param string $hhmm The time in the format HH:MM (24-hour format is used)
+   */
+  public function setHourMinute(string $hhmm) : self
+  {
+    if (count($exploded = explode(':', $hhmm)) !== 2)
+    {
+      throw new \InvalidArgumentException("Invalid time '$hhmm'");
+    }
+
+    list($hour, $minute) = $exploded;
+    $this->setTime(intval($hour), intval($minute));
+
+    return $this;
+  }
+
+
   // Adds $n (which can be negative) months to this date, without overflowing
   // into the next month.  For example modifying 2023-01-31 by +1 month gives
   // 2023-02-28 rather than 2023-03-03.
@@ -161,24 +241,57 @@ class DateTime extends \DateTime
   }
 
 
+  /**
+   * Get the hour in 24-hour format without leading zeros
+   */
   public function getHour() : int
   {
     return intval($this->format('G'));
   }
 
 
+  /**
+   * Get the minute without leading zeros
+   */
+  public function getMinute() : int
+  {
+    return intval($this->format('i'));
+  }
+
+
+  /**
+   * Get the day of the month without leading zeros
+   */
   public function getDay() : int
   {
     return intval($this->format('j'));
   }
 
 
+  public function getDayOfWeek() : int
+  {
+    return intval($this->format('w'));
+  }
+
+
+  public function getDaysInMonth() : int
+  {
+    return intval($this->format('t'));
+  }
+
+
+  /**
+   * Get the numeric representation of a month, without leading zeros
+   */
   public function getMonth() : int
   {
     return intval($this->format('n'));
   }
 
 
+  /**
+   * Get the full numeric representation of a year, at least 4 digits, with - for years BCE.
+   */
   public function getYear() : int
   {
     return intval($this->format('Y'));
@@ -188,22 +301,46 @@ class DateTime extends \DateTime
   // Returns a date in ISO 8601 format ('yyyy-mm-dd')
   public function getISODate() : string
   {
-    return $this->format('Y-m-d');
+    return $this->format(self::ISO8601_DATE);
   }
 
 
   // Set the day to $day
-  public function setDay(int $day) : void
+  public function setDay(int $day) : self
   {
     $date = getdate($this->getTimestamp());
     $this->setDate($date['year'], $date['mon'], $day);
+
+    return $this;
   }
 
 
   // Sets the day to $day, but not past the end of the month
-  public function setDayNoOverflow(int $day) : void
+  public function setDayNoOverflow(int $day) : self
   {
     $this->setDay(min($day, (int) $this->format('t')));
+
+    return $this;
+  }
+
+
+  // Winds the date back to the first $month that is at or before
+  // this date.  Useful for aligning with financial or academic years.
+  // If $month is 0, then no change is made.
+  public function setMonthYearStart(int $month) : self
+  {
+    if ($month !== 0)
+    {
+      $this_month = $this->getMonth();
+      $modification = $month - $this_month;
+      if ($modification > 0)
+      {
+        $modification -= MONTHS_PER_YEAR;
+      }
+      $this->modifyMonthsNoOverflow($modification, true);
+    }
+
+    return $this;
   }
 
 
@@ -330,7 +467,7 @@ class DateTime extends \DateTime
     global $holidays;
 
     $year = $this->format('Y');
-    $iso_date = $this->format('Y-m-d');
+    $iso_date = $this->getISODate();
 
     // Only need to check if a date is a holiday once, so store the answer in a
     // static property
@@ -399,7 +536,7 @@ class DateTime extends \DateTime
   public function isToday() : bool
   {
     $today = new DateTime();
-    return ($this->format('Y-m-d') == $today->format('Y-m-d'));
+    return ($this->getISODate() == $today->getISODate());
   }
 
 
@@ -411,7 +548,7 @@ class DateTime extends \DateTime
 
   // Set the time to $s, where $s is the nominal number of
   // seconds after midnight, ignoring DST changes.
-  public function setNominalSeconds(int $s) : void
+  public function setNominalSeconds(int $s) : self
   {
     $second = $s % 60;
     $s -= $second;
@@ -426,6 +563,6 @@ class DateTime extends \DateTime
       $hour -= 24;
     }
 
-    $this->setTime($hour, $minute, $second);
+    return $this->setTime($hour, $minute, $second);
   }
 }

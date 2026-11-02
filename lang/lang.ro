@@ -61,21 +61,21 @@ $vocab["end"]                = "Sfarsit";
 $vocab["start_date"]         = "Data de inceput";
 $vocab["end_date"]           = "Data de sfarsit";
 $vocab["time"]               = "Perioada";
-$vocab["period"]             = "Perioada";
+$vocab["period_title"]       = "Perioada";
 $vocab["duration"]           = "Durata";
-$vocab["second_lc"]          = "Secunda";
+$vocab["second"]             = "Secunda";
 $vocab["seconds"]            = "Secunde";
-$vocab["minute_lc"]          = "minut";
+$vocab["minute"]             = "minut";
 $vocab["minutes"]            = "minute";
-$vocab["hour_lc"]            = "ora";
+$vocab["hour"]               = "ora";
 $vocab["hours"]              = "ore";
 $vocab["day"]                = "zi";
 $vocab["days"]               = "zile";
 $vocab["week"]               = "saptamana";
 $vocab["weeks"]              = "saptamani";
-$vocab["year_lc"]            = "an";
+$vocab["year"]               = "an";
 $vocab["years"]              = "ani";
-$vocab["period_lc"]          = "perioada";
+$vocab["period"]             = "perioada";
 $vocab["periods"]            = "perioade";
 $vocab["all_day"]            = "Toata ziua";
 $vocab["area"]               = "Zona";
@@ -106,12 +106,12 @@ $vocab["skip_conflicts"]     = "Ignora conflicte";
 $vocab["no_mail"]            = "Nu trimite email";
 $vocab["ctrl_click"]         = "Foloseste Control-Click pentru a selecta mai multe sali";
 $vocab["entryid"]            = "ID rezervare ";
-$vocab["repeat_id"]          = "ID repetare "; 
+$vocab["repeat_id"]          = "ID repetare ";
 $vocab["brief_description"]  = "Descriere sumara.";
 $vocab["status"]             = "Status";
 $vocab["public"]             = "Public";
 $vocab["private"]            = "Privat";
-$vocab["unavailable"]        = "Indisponibil";
+$vocab["unavailable"]        = "[Indisponibil]";
 $vocab["is_mandatory_field"] = "Este un camp obligatoriu, introduceti o valoare";
 $vocab["missing_mandatory_field"] = "Nu ati introdus o valoare pentru campul obligatoriu";
 $vocab["confirmed"]          = "Confirmat";
@@ -197,7 +197,7 @@ $vocab["min_delete_time_before"]  = 'Nu poti modifica sau sterge o rezervare car
 $vocab["max_delete_time_before"]  = 'Nu poti modifica sau sterge o rezervare care se incheie in mai mult de %1$d %2$s';
 $vocab["earliest_booking_date"]   = "Cea mai devreme data de rezervare este %s";
 $vocab["latest_booking_date"]     = "Ultima data de rezervare este %s";
-$vocab["max_booking_duration"]    = "Durata maxima a unei rezervari este";
+$vocab["max_booking_duration"]    = 'Durata maxima a unei rezervari este %1$d %2$s';
 $vocab["max_per_day_global"]      = "Numarul maxim de rezervari pe zi pe utilizator pe intreg sistemul este";
 $vocab["max_per_week_global"]     = "Numarul maxim de rezervari pe saptamana pe utilizator pe intreg sistemul este";
 $vocab["max_per_month_global"]    = "Numarul maxim de rezervari pe luna pe utilizator pe intreg sistemul este";
@@ -327,7 +327,7 @@ $vocab["delete_entries"]        = "Sterge rezervari";
 $vocab["delete_entries_warning"] = "ATENTIE!  Se vor sterge toate rezervarile continand" .
                                    "string de cautare.  Operatia nu poate fi reversibila.  Esti " .
                                    "sigur ca vrei sa continui?\n\n" .
-                                   "Numar total de rezervari ce vor fi sterse: %%s"; // The % sign is escaped because the string substitution is done by JavaScript
+                                   "Numar total de rezervari ce vor fi sterse: %s";
 $vocab["delete_entries_failed"] = "Rezervarile nu au putut fi sterse.";
 
 // Used in admin.php
@@ -506,7 +506,7 @@ $vocab["restore_original"]   = "Revenire la original";
 $vocab["type."]             = "Selecteaza un tip";
 $vocab["type.I"]            = "Intern";
 $vocab["type.E"]            = "Extern";
- 
+
 // General
 $vocab["fatal_error"]        = "Whoops!  Din nefericire MRBS a intampinat o eroare fatala.  Te rugam sa consulti administratorul sistemului";
 $vocab["fatal_db_error"]     = "Eroare fatala: din nefericire baza de date nu este disponibila momentan.";

@@ -23,7 +23,10 @@ $vocab["outstanding"]        = "väntande bokningar";
 $vocab["bookingsfor"]        = "Bokningar för";
 $vocab["bookingsforpost"]    = ""; // Goes after the date
 $vocab["areas"]              = "Områden";
-$vocab["today"]              = "Idag";
+$vocab["now_day"]            = "Idag";
+$vocab["now_week"]           = "Idag";
+$vocab["now_month"]          = "Idag";
+$vocab["now_year"]           = "Idag";
 $vocab["daybefore"]          = "Gå till föregående dag";
 $vocab["dayafter"]           = "Gå till nästa dag";
 $vocab["gototoday"]          = "Gå till idag";
@@ -69,13 +72,13 @@ $vocab["end"]                = "Stopp";
 $vocab["start_date"]         = "Starttid";
 $vocab["end_date"]           = "Sluttid";
 $vocab["time"]               = "Tid";
-$vocab["period"]             = "Period";
+$vocab["period_title"]       = "Period";
 $vocab["duration"]           = "Längd";
-$vocab["second_lc"]          = "sekund";
+$vocab["second"]             = "sekund";
 $vocab["seconds"]            = "sekunder";
-$vocab["minute_lc"]          = "minut";
+$vocab["minute"]             = "minut";
 $vocab["minutes"]            = "minuter";
-$vocab["hour_lc"]            = "timme";
+$vocab["hour"]               = "timme";
 $vocab["hours"]              = "timmar";
 $vocab["day"]                = "dag";
 $vocab["days"]               = "dagar";
@@ -83,9 +86,9 @@ $vocab["week"]               = "vecka";
 $vocab["weeks"]              = "veckor";
 $vocab["month"]              = "månad";
 $vocab["months"]             = "månader";
-$vocab["year_lc"]            = "år";
+$vocab["year"]               = "år";
 $vocab["years"]              = "år";
-$vocab["period_lc"]          = "period";
+$vocab["period"]             = "period";
 $vocab["periods"]            = "perioder";
 $vocab["all_day"]            = "hela dagen";
 $vocab["area"]               = "Område";
@@ -129,7 +132,7 @@ $vocab["brief_description"]  = "Kort beskrivning";
 $vocab["status"]             = "Status";
 $vocab["public"]             = "Offentlig";
 $vocab["private"]            = "Privat";
-$vocab["unavailable"]        = "ej tillgänglig";
+$vocab["unavailable"]        = "[ej tillgänglig]";
 $vocab["is_mandatory_field"] = "är ett obligatoriskt fält, vänligen ange ett värde";
 $vocab["missing_mandatory_field"] = "Du har inte angett ett värde för det obligatoriska fältet";
 $vocab["confirmed"]          = "Slutgiltig";
@@ -239,7 +242,7 @@ $vocab["min_delete_time_before"]  = 'Du kan inte ändra eller radera en bokning 
 $vocab["max_delete_time_before"]  = 'Du kan inte ändra eller radera en bokning som slutar mindre än %1$d %2$s';
 $vocab["earliest_booking_date"]   = "Tidigaste bokningsdatum är %s";
 $vocab["latest_booking_date"]     = "Senaste bokningsdatum är %s";
-$vocab["max_booking_duration"]    = "Maximal löptid på en bokning är";
+$vocab["max_booking_duration"]    = 'Maximal löptid på en bokning är %1$d %2$s';
 $vocab["max_per_day_global"]      = "Maximala antalet bokningar per dag per användare över hela systemet är";
 $vocab["max_per_week_global"]     = "Maximala antalet bokningar per vecka per användare över hela systemet är";
 $vocab["max_per_month_global"]    = "Maximala antalet bokningar per månad per användare över hela systemet är";
@@ -392,7 +395,7 @@ $vocab["delete_entries"]        = "Ta bort poster";
 $vocab["delete_entries_warning"] = "VARNING! Detta tar bort alla poster som matchar " .
                                    "söksträngen.  Operationen kan inte ångras." .
                                    "Vill du verkligen fortsätta?\n\n" .
-                                   "Totalt antal poster som ska tas bort: %%s"; // The % sign is escaped because the string substitution is done by JavaScript
+                                   "Totalt antal poster som ska tas bort: %s";
 $vocab["delete_entries_failed"] = "Posterna kunde inte tas bort";
 
 // Used in admin.php
@@ -505,7 +508,7 @@ $vocab["confirm_delete_user"] = "Är du säker på att du vill radera användare
 
 // Used in del.php
 $vocab["deletefollowing"]    = "Detta raderar följande bokningar";
-$vocab["and_n_more"]         = "och ytterligare %s";  // %s rather than %d because n is the output of number_format()
+$vocab["and_n_more"]         = "och ytterligare %s";  // %s rather than %d because n is the output of NumberFormatter::format()
 $vocab["sure"]               = "Är du säker?";
 $vocab["YES"]                = "JA";
 $vocab["NO"]                 = "NEJ";

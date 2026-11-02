@@ -11,6 +11,8 @@ use UnexpectedValueException;
 // Cancel a user's registration
 function cancel_registration(int $registration_id) : void
 {
+  global $auth;
+
   $registration = get_registration_by_id($registration_id);
 
   if (!isset($registration))
@@ -21,9 +23,11 @@ function cancel_registration(int $registration_id) : void
   $entry = get_entry_by_id($registration['entry_id']);
 
   // Check that the user is authorised for this operation
+  $mrbs_user = session()->getCurrentUser();
   if (!isset($entry) ||
       (!getWritable($registration['username'], $entry['room_id']) &&
-       !getWritable($registration['create_by'], $entry['room_id'])))
+       !getWritable($registration['create_by'], $entry['room_id']) &&
+       !(isset($mrbs_user) && $auth['users_can_delete_others_registrations'])))
   {
     return;
   }
@@ -105,7 +109,7 @@ checkAuthorised(this_page());
 // Get the form vars
 $action = get_form_var('action', 'string');
 $event_id = get_form_var('event_id', 'int');
-$returl = get_form_var('returl', 'string');
+$returl = get_form_var('returl', 'url_local', 'index.php');
 
 // Take the appropriate action.  The individual functions check that the user
 // is authorised to take the action.

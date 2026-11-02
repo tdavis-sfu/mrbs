@@ -2,9 +2,7 @@
 namespace MRBS\Auth;
 
 use MRBS\User;
-
-require_once MRBS_ROOT . '/auth/cms/wordpress.inc';
-
+use MRBS\Cms\Wp;
 
 class AuthWordpress extends Auth
 {
@@ -13,30 +11,20 @@ class AuthWordpress extends Auth
     $this->checkSessionMatchesType();
   }
 
-  /* validateUser($user, $pass)
-   *
-   * Checks if the specified username/password pair are valid
-   *
-   * $user  - The user name
-   * $pass  - The password
-   *
-   * Returns:
-   *   false    - The pair are invalid or do not exist
-   *   string   - The validated username
-   */
+
   public function validateUser(
     #[\SensitiveParameter]
     ?string $user,
     #[\SensitiveParameter]
     ?string $pass)
   {
-    return (is_wp_error(wp_authenticate($user, $pass))) ? false : $user;
+    return (Wp::is_wp_error(Wp::wp_authenticate($user, $pass))) ? false : $user;
   }
 
 
-  protected function getUserFresh(string $username) : ?User
+  public function getUserFresh(string $username) : ?User
   {
-    $wp_user = get_user_by('login', $username);
+    $wp_user = Wp::get_user_by('login', $username);
 
     if ($wp_user === false)
     {
@@ -52,11 +40,12 @@ class AuthWordpress extends Auth
   }
 
 
-  // Checks whether validation of a user by email address is possible and
-  // allowed.  In the case of WordPress, wp_authenticate() accepts either
-  // a username or email address and so this function always returns true.
+  /**
+   */
   public function canValidateByEmail() : bool
   {
+    // In the case of WordPress, wp_authenticate() accepts either
+    // a username or email address and so this function always returns true.
     return true;
   }
 
@@ -74,7 +63,7 @@ class AuthWordpress extends Auth
 
     // The 'role__in' argument to get_users() is only supported in Wordpress >= 4.4.
     // Before that we have to do it one role at a time with the 'role' argument.
-    $can_use_role__in = version_compare(get_bloginfo('version'), '4.4', '>=');
+    $can_use_role__in = version_compare(Wp::get_bloginfo('version'), '4.4', '>=');
 
     $args = array('fields'  => array('user_login', 'display_name'),
                   'orderby' => 'display_name',
@@ -83,7 +72,7 @@ class AuthWordpress extends Auth
     if ($can_use_role__in)
     {
       $args['role__in'] = $mrbs_roles;
-      $users = get_users($args);
+      $users = Wp::get_users($args);
     }
     else
     {
@@ -93,7 +82,7 @@ class AuthWordpress extends Auth
       foreach ($mrbs_roles as $mrbs_role)
       {
         $args['role'] = $mrbs_role;
-        $users = array_merge($users, get_users($args));
+        $users = array_merge($users, Wp::get_users($args));
       }
       // Remove duplicate users
       $users = array_map('unserialize', array_unique(array_map('serialize', $users)));
@@ -182,7 +171,7 @@ class AuthWordpress extends Auth
   // Example "MRBS Admin" -> "mrbs_admin"
   private static function standardise_role_name(string $role) : string
   {
-    return str_replace(' ', '_', \MRBS\utf8_strtolower($role));
+    return str_replace(' ', '_', mb_strtolower($role));
   }
 
 }

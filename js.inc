@@ -8,7 +8,7 @@ function script_html(string $src, bool $add_version=false) : string
 {
   $html = '<script src="';
   $value = ($add_version) ? add_version($src) : $src;
-  $html .= htmlspecialchars($value);
+  $html .= escape_html($value);
   $html .= "\"></script>\n";
 
   return $html;
@@ -37,13 +37,13 @@ if ($multisite && isset($site) && ($site !== ''))
 // file can't use jQuery.
 echo script_html('js/init.js.php', true);
 
-echo script_html(($debug) ? 'jquery/jquery-3.7.0.js' : 'jquery/jquery-3.7.0.min.js');
+echo script_html(($debug) ? 'jquery/jquery-4.0.0.js' : 'jquery/jquery-4.0.0.min.js');
 
-// We need the migration script now that we are running jQuery 3.0+, or at least
+// We need the migration script now that we are running jQuery 4.0+, or at least
 // until we are confident that our JavaScript is not using any features that have
 // been removed.   The uncompressed version will output warnings about removed and
 // deprecated features to the console
-echo script_html(($debug) ? 'jquery/jquery-migrate-3.4.0.js' : 'jquery/jquery-migrate-3.4.0.min.js');
+echo script_html(($debug) ? 'jquery/jquery-migrate-4.0.2.js' : 'jquery/jquery-migrate-4.0.2.min.js');
 
 // We are using the jQuery UI library, which has been custom-built to include the following components:
 //   - Core
@@ -74,20 +74,20 @@ echo script_html("js/general.js.php?$query_string", true);
 
 echo script_html("js/flatpickr/flatpickr.min.js", true);
 $datepicker_src = "js/datepicker.js.php?$query_string";
-$flatpickr_lang_path = get_flatpickr_lang_path();
+$flatpickr_lang_path = Language::getInstance()->getFlatpickrLangPath();
 if (isset($flatpickr_lang_path))
 {
   // Add the localisation file
   echo script_html($flatpickr_lang_path, true);
   // And give the datepicker file a query string parameter to force the browser cache
   // to be flushed when the language changes.
-  $datepicker_src .= '&lang=' . urlencode(get_flatpickr_property($flatpickr_lang_path));
+  $datepicker_src .= '&lang=' . urlencode(Language::getFlatpickrProperty($flatpickr_lang_path));
 }
 echo script_html($datepicker_src, true);
 
 echo script_html("jquery/select2/dist/js/select2.full.min.js", true);
 
-if (null !== ($select2_lang_path = get_select2_lang_path()))
+if (null !== ($select2_lang_path = Language::getInstance()->getSelect2LangPath()))
 {
   echo script_html($select2_lang_path, true);
 }

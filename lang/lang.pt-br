@@ -25,7 +25,10 @@ $vocab["outstanding"]        = "reservas pendentes";
 $vocab["bookingsfor"]        = "Reservas para";
 $vocab["bookingsforpost"]    = ""; // Goes after the date
 $vocab["areas"]              = "Áreas";
-$vocab["today"]              = "Hoje";
+$vocab["now_day"]            = "Hoje";
+$vocab["now_week"]           = "Hoje";
+$vocab["now_month"]          = "Hoje";
+$vocab["now_year"]           = "Hoje";
 $vocab["daybefore"]          = "Ir para Dia Anterior";
 $vocab["dayafter"]           = "Ir para Dia Seguinte";
 $vocab["gototoday"]          = "Ir para dia de hoje";
@@ -57,7 +60,7 @@ $vocab["registration_level_unlimited_with_names"] = ' [%1$d: %2$s]';
 $vocab["exit_kiosk_mode_confirm"]    = "Sair do modo quiosque?";
 $vocab["close"]              = "Fechar";
 $vocab["ok"]                 = "OK";
-$vocab["cancel"]             = "Cancelar";						 
+$vocab["cancel"]             = "Cancelar";
 
 // Used in trailer.inc
 $vocab["viewday"]            = "Ver Dia";
@@ -79,14 +82,14 @@ $vocab["end"]                = "Fim";
 $vocab["start_date"]         = "Início";
 $vocab["end_date"]           = "Fim";
 $vocab["time"]               = "Hora";
-$vocab["period"]             = "Período";
+$vocab["period_title"]       = "Período";
 $vocab["unknown_period"]     = "<Período %d>";
 $vocab["duration"]           = "Duração";
-$vocab["second_lc"]          = "segundo";
+$vocab["second"]             = "segundo";
 $vocab["seconds"]            = "segundos";
-$vocab["minute_lc"]          = "minuto";
+$vocab["minute"]             = "minuto";
 $vocab["minutes"]            = "minutos";
-$vocab["hour_lc"]            = "hora";
+$vocab["hour"]               = "hora";
 $vocab["hours"]              = "horas";
 $vocab["day"]                = "dia";
 $vocab["days"]               = "dias";
@@ -94,9 +97,9 @@ $vocab["week"]               = "semana";
 $vocab["weeks"]              = "semanas";
 $vocab["month"]              = "mês";
 $vocab["months"]             = "meses";
-$vocab["year_lc"]            = "ano";
+$vocab["year"]               = "ano";
 $vocab["years"]              = "anos";
-$vocab["period_lc"]          = "período";
+$vocab["period"]             = "período";
 $vocab["periods"]            = "períodos";
 $vocab["all_day"]            = "Todo o dia";
 $vocab["area"]               = "Área";
@@ -135,12 +138,12 @@ $vocab["skip_conflicts"]     = "Skip past conflicts";
 $vocab["no_mail"]            = "Não enviar  email";
 $vocab["ctrl_click"]         = "Precione Control-Click para selecionar mais de uma sala";
 $vocab["entryid"]            = "ID de entrada";
-$vocab["repeat_id"]          = "Repetir ID "; 
+$vocab["repeat_id"]          = "Repetir ID ";
 $vocab["brief_description"]  = "Descrição breve.";
 $vocab["status"]             = "Estado";
 $vocab["public"]             = "Público";
 $vocab["private"]            = "Privado";
-$vocab["unavailable"]        = "Não disponível";
+$vocab["unavailable"]        = "[Não disponível]";
 $vocab["is_mandatory_field"] = "é de preenchimento obrigatório.";
 $vocab["missing_mandatory_field"] = "Este campo é de preenchimento obrigatório";
 $vocab["confirmed"]          = "Confirmado";
@@ -238,7 +241,7 @@ $vocab["mail_body_reminder"]     = "Alerta - Uma reserva aguarda aprovação; de
 $vocab["mail_body_repeats_booked"]   = "The following dates were booked:";
 $vocab["mail_body_repeats_deleted"]  = "The following bookings were deleted:";
 $vocab["mail_body_exceptions"]       = "The following dates could not be booked due to conflicts:";
-																		  
+
 $vocab["mail_subject_new_entry"] = "Reserva de Salas"; // $mrbs_company
 $vocab["mail_subject_changed_entry"] = "Reserva de Salas"; // $mrbs_company
 $vocab["mail_subject_delete"]     = "Esta reserva foi eliminada"; // $mrbs_company
@@ -262,7 +265,7 @@ $vocab["max_delete_time_before"]  = 'You cannot edit or delete a booking which e
 $vocab["max_delete_time_before_start"]  = 'You cannot edit or delete a booking which starts in more than %1$d %2$s';
 $vocab["earliest_booking_date"]   = "The earliest booking date is %s";
 $vocab["latest_booking_date"]     = "The latest booking date is %s";
-$vocab["max_booking_duration"]    = "The maximum duration of a booking is";
+$vocab["max_booking_duration"]    = 'The maximum duration of a booking is %1$d %2$s';
 $vocab["max_per_day_global"]      = "The maximum number of bookings per day per user across the whole system is";
 $vocab["max_per_week_global"]     = "The maximum number of bookings per week per user across the whole system is";
 $vocab["max_per_month_global"]    = "The maximum number of bookings per month per user across the whole system is";
@@ -294,7 +297,7 @@ $vocab["exit_kiosk_intro"]          = "Enter the password you set when you enter
 $vocab["enter_kiosk_mode"]          = "Enter Kiosk Mode";
 $vocab["exit_kiosk_mode"]           = "Exit Kiosk Mode";
 $vocab["kiosk"]                     = "Kiosk";
-$vocab["kiosk_password"]            = "Kiosk password";																									
+$vocab["kiosk_password"]            = "Kiosk password";
 
 // Used in pending.php
 $vocab["pending"]            = "Reservas pendentes";
@@ -346,7 +349,7 @@ $vocab["upgrading_site"]           = "Upgrading site '%s'";  // site name
 $vocab["upgrading_main_site"]      = "Upgrading the main site";
 $vocab["no_tables_found"]          = "No tables found";
 $vocab["upgrade_to_version"]       = "Atualização de versão";
-$vocab["upgrade_to_local_version"] = "Atualização de versão para versão local"; 
+$vocab["upgrade_to_local_version"] = "Atualização de versão para versão local";
 $vocab["upgrade_completed"]        = "Atualização de versão completa.";
 
 // User access levels
@@ -440,8 +443,8 @@ $vocab["delete_entries"]        = "Delete entries";
 $vocab["delete_entries_warning"] = "WARNING!  This will delete all the entries matching " .
                                    "the search criteria.  The operation cannot be undone.  Are " .
                                    "you sure you want to continue?\n\n" .
-                                   "Total number of entries that will be deleted: %%s"; // The % sign is escaped because the string substitution is done by JavaScript
-$vocab["deleting_n_entries"]    = "Deleting %%d entries ..."; // The % sign is escaped because the number substitution is done by JavaScript
+                                   "Total number of entries that will be deleted: %s";
+$vocab["deleting_n_entries"]    = "Deleting %d entries ...";
 $vocab["delete_entries_failed"] = "The entries could not be deleted.";
 $vocab["cancel"]                = "Cancelar";
 $vocab["registered"]            = "Registered";
@@ -564,7 +567,7 @@ $vocab["confirm_delete_user"] = "Are you sure you want to delete this user?";
 
 // Used in del.php
 $vocab["deletefollowing"]    = "Esta ação apagará as seguintes Marcações";
-$vocab["and_n_more"]         = "and %s more";  // %s rather than %d because n is the output of number_format()
+$vocab["and_n_more"]         = "and %s more";  // %s rather than %d because n is the output of NumberFormatter::format()
 $vocab["sure"]               = "Tem a certeza?";
 $vocab["YES"]                = "Sim";
 $vocab["NO"]                 = "Não";

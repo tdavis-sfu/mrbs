@@ -53,7 +53,9 @@ $form_vars = array(
   'area_confirmed_default'        => 'string',
   'area_default_type'             => 'string',
   'area_times_along_top'          => 'string',
-  'custom_html'                   => 'string'
+  'custom_html'                   => 'string',
+  'period_starts'                 => 'array',
+  'period_ends'                   => 'array'
 );
 
 foreach($form_vars as $var => $var_type)
@@ -187,7 +189,33 @@ else
     $$var = (!empty($$var)) ? 1 : 0;
   }
 
+  // TODO: This is a kludge until we store use_period_times in the database.
+  // We need to make sure that the period start times correspond to the correct periods.
+  if (count($area_periods) == count($period_starts) + 1)
+  {
+    array_unshift($period_starts, null);
+  }
+  // Assemble the periods as an object.
+  $periods_tmp = new Periods($area);
+  for ($i = 0; $i < count($area_periods); $i++)
+  {
+    $periods_tmp->add(new Period(
+      $area_periods[$i],
+      $period_starts[$i] ?? null,
+      $period_ends[$i] ?? null
+    ));
+  }
 
+  // Validate the periods, but only if we are using periods with period times.
+  if ($area_enable_periods && isset($period_starts[0]) && (true !== ($result = $periods_tmp->validate())))
+  {
+    $errors[] = $result;
+  }
+
+  // Convert the periods to a value suitable for the database.
+  $area_periods = $periods_tmp->toDbValue();
+
+  // Validate times mode settings
   if (!$area_enable_periods)
   {
     // Avoid divide by zero errors
@@ -368,7 +396,7 @@ $sql_params[] = $area_reminders_enabled;
 $assign_array[] = "enable_periods=?";
 $sql_params[] = $area_enable_periods;
 $assign_array[] = "periods=?";
-$sql_params[] = json_encode($area_periods);
+$sql_params[] = $area_periods;
 $assign_array[] = "confirmation_enabled=?";
 $sql_params[] = $area_confirmation_enabled;
 $assign_array[] = "confirmed_default=?";

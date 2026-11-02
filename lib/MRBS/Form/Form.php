@@ -2,8 +2,8 @@
 declare(strict_types=1);
 namespace MRBS\Form;
 
+use MRBS\Errors\Errors;
 use MRBS\Exception;
-use function MRBS\fatal_error;
 use function MRBS\generate_token;
 use function MRBS\get_form_var;
 use function MRBS\get_vocab;
@@ -57,7 +57,7 @@ class Form extends Element
       if ($max_file_size !== false)
       {
         $max_file_size = self::convertToBytes($max_file_size);
-        $this->addHiddenInput('MAX_FILE_SIZE', $max_file_size);
+        $this->addHiddenInput('MAX_FILE_SIZE', $max_file_size, 'MAX_FILE_SIZE');
       }
       // Add a CSRF token
       $this->addCSRFToken();
@@ -126,11 +126,12 @@ class Form extends Element
   }
 
 
-  // Adds a hidden input to the form
-  public function addHiddenInput(string $name, $value) : Form
+  // Adds a hidden input to the form.  Optionally give the element a key
+  // so that it can be removed later using the same key.
+  public function addHiddenInput(string $name, $value, ?string $key=null) : Form
   {
     $element = new ElementInputHidden($name, $value);
-    $this->addElement($element, $name);
+    $this->addElement($element, $key);
     return $this;
   }
 
@@ -147,9 +148,9 @@ class Form extends Element
 
 
   // Removes a hidden input from the form.
-  private function removeHiddenInput(string $name) : Form
+  private function removeHiddenInput(string $key) : Form
   {
-    $this->removeElement($name);
+    $this->removeElement($key);
     return $this;
   }
 
@@ -205,7 +206,7 @@ class Form extends Element
         session()->logoffUser();
       }
 
-      fatal_error(get_vocab("session_expired"));
+      Errors::fatalError(get_vocab("session_expired"));
     }
   }
 
@@ -231,12 +232,15 @@ class Form extends Element
 
   private function addCSRFToken() : Form
   {
-    $this->addHiddenInput(self::TOKEN_NAME, self::getToken());
+    $this->addHiddenInput(self::TOKEN_NAME, self::getToken(), self::TOKEN_NAME);
     return $this;
   }
 
 
-  // Get a CSRF token
+  /**
+   * Get a CSRF token.  If there's already a token associated with the session then use that, otherise generate and
+   * save a new one.
+   */
   public static function getToken() : string
   {
     $token_length = 32;

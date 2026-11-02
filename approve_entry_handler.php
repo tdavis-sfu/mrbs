@@ -14,7 +14,7 @@ require_once "functions_mail.inc";
 $action = get_form_var('action', 'string');
 $id = get_form_var('id', 'int');
 $series = get_form_var('series', 'bool');
-$returl = get_form_var('returl', 'string');
+$returl = get_form_var('returl', 'url_local', 'index.php');
 $note = get_form_var('note', 'string');
 
 // Check the CSRF token
@@ -34,7 +34,7 @@ $mail_previous = array();
 $start_times = array();
 
 // Give the return URL a query string if it doesn't already have one
-if (utf8_strpos($returl, '?') === false)
+if (mb_strpos($returl, '?') === false)
 {
   $returl .= "?year=$year&month=$month&day=$day&area=$area&room=$room";
 }
@@ -110,7 +110,7 @@ if (isset($action))
     // so that we will know whether to include iCalendar information in the email)
     get_area_settings($data['area_id']);
     // Send the email
-    notifyAdminOnBooking($data, $mail_previous, $is_new_entry, $series, $start_times, $action, $note);
+    notify_by_email($data, $mail_previous, $series, $action, $start_times, $note);
   }
 }
 

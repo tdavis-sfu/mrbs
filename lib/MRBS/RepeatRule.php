@@ -3,6 +3,7 @@ declare(strict_types=1);
 namespace MRBS;
 
 use InvalidArgumentException;
+use MRBS\ICalendar\Property;
 use MRBS\ICalendar\RFC5545;
 
 class RepeatRule
@@ -51,7 +52,7 @@ class RepeatRule
     global $weekstarts;
 
     $names = array();
-    $locale = ($for_mail) ? get_mail_locale() : null;
+    $locale = ($for_mail) ? Language::getInstance()->getMailLocale() : null;
 
     for ($i=0; $i<DAYS_PER_WEEK; $i++)
     {
@@ -98,7 +99,7 @@ class RepeatRule
           return ($repeat_interval == 1) ? get_mail_vocab('month') : get_mail_vocab('months');
           break;
         case RepeatRule::YEARLY:
-          return ($repeat_interval == 1) ? get_mail_vocab('year_lc') : get_mail_vocab('years');
+          return ($repeat_interval == 1) ? get_mail_vocab('year') : get_mail_vocab('years');
           break;
         default:
           return '';
@@ -118,7 +119,7 @@ class RepeatRule
         return ($repeat_interval == 1) ? get_vocab('month') : get_vocab('months');
         break;
       case RepeatRule::YEARLY:
-        return ($repeat_interval == 1) ? get_vocab('year_lc') : get_vocab('years');
+        return ($repeat_interval == 1) ? get_vocab('year') : get_vocab('years');
         break;
       default:
         return '';
@@ -458,7 +459,7 @@ class RepeatRule
     }
 
     // The UNTIL date-time "MUST be specified in UTC time"
-    $rule .= ";UNTIL=" . gmdate(RFC5545::DATETIME_FORMAT . '\Z', $this->getEndDate()->getTimestamp());
+    $rule .= ";UNTIL=" . Property::convertTimestamps($this->getEndDate()->getTimestamp())[0];
 
     return $rule;
   }

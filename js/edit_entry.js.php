@@ -5,47 +5,83 @@ namespace MRBS;
 require "../defaultincludes.inc";
 
 http_headers(array("Content-type: application/x-javascript"),
-             60*30);  // 30 minute expiry
+             60*30);  // 30-minute expiry
 ?>
 
 'use strict';
 
-var isBookAdmin;
+let isBookAdmin;
+
+<?php
+// Create a JavaScript version of the PHP $is_mandatory_fields variable
+echo "const mandatoryFields = {";
+if (!empty($is_mandatory_field))
+{
+  $lines = [];
+  foreach ($is_mandatory_field as $key => $value)
+  {
+    list($table, $field_name) = explode('.', $key, 2);
+    if (($table === 'entry') && !empty($value))
+    {
+      // Prefix custom field names
+      if (!in_array($field_name, $standard_fields['entry']))
+      {
+        $field_name = VAR_PREFIX . $field_name;
+      }
+      $line = "  $field_name: ";
+      if (is_bool($value))
+      {
+        $line .= ($value) ? 'true' : 'false';
+      }
+      else
+      {
+        $line .= '[' . implode(', ', $value) . ']';
+      }
+      $lines[] = $line;
+    }
+  }
+  if (!empty($lines))
+  {
+    echo "\n" . implode(",\n", $lines) . "\n";
+  }
+}
+echo "};\n";
+?>
 
 <?php
 // Set (if set is true) or clear (if set is false) a timer
 // to check for conflicts periodically in case someone else
-// books the slot you are looking at.  If setting the timer
+// books the slot you are looking at.  If setting the timer,
 // it also performs an immediate check.
 ?>
-var conflictTimer = function conflictTimer(set) {
-    <?php
-    if (!empty($ajax_refresh_rate))
-    {
-      ?>
-      if (set)
-      {
-        <?php
-        // (Note the config variable is in seconds, but the setInterval() function
-        // uses milliseconds)
-        // Only set the timer if the page is visible
-        ?>
-        if (!isHidden())
-        {
-          checkConflicts(true);
-          conflictTimer.id = window.setInterval(function() {
-              checkConflicts(true);
-            }, <?php echo $ajax_refresh_rate * 1000 ?>);
-        }
-      }
-      else if (typeof conflictTimer.id !== 'undefined')
-      {
-        window.clearInterval(conflictTimer.id);
-      }
-      <?php
-    }
+const conflictTimer = function conflictTimer(set) {
+  <?php
+  if (!empty($ajax_refresh_rate))
+  {
     ?>
-  };
+    if (set)
+    {
+      <?php
+      // (Note the config variable is in seconds, but the setInterval() function
+      // uses milliseconds)
+      // Only set the timer if the page is visible
+      ?>
+      if (!isHidden())
+      {
+        checkConflicts(true);
+        conflictTimer.id = window.setInterval(function() {
+            checkConflicts(true);
+          }, <?php echo $ajax_refresh_rate * 1000 ?>);
+      }
+    }
+    else if (typeof conflictTimer.id !== 'undefined')
+    {
+      window.clearInterval(conflictTimer.id);
+    }
+    <?php
+  }
+  ?>
+};
 
 
 <?php
@@ -53,105 +89,105 @@ var conflictTimer = function conflictTimer(set) {
 // if it's a repeating booking, (2) show/hide the repeat end date and skip fields and
 // (3) display the secondary repeat type fieldset appropriate to the selected repeat type.
 ?>
-var changeRepTypeDetails = function changeRepTypeDetails() {
-    var repType = parseInt($('input[name="rep_type"]:checked').val(), 10);
-    var isRepeat = (repType !== <?php echo RepeatRule::NONE ?>);
-    <?php
-    // Add a 'required' attribute to the rep_interval input to prevent users entering an
-    // empty string.  But remove it if it's not a repeating entry, because if they happen
-    // to have an empty string they won't see the validation message since the input will
-    // be hidden.
-    ?>
-    $('#rep_interval').prop('required', isRepeat);
-    <?php
-    // Add a 'required' attribute to the rep_end_date input if shown to prevent users
-    //  entering an empty string.  Show/hide the repeat end date and skip fields
-    ?>
-    $('#rep_end_date').prop('required', isRepeat).parent().toggle(isRepeat);
-    $('#skip').parent().toggle(isRepeat);
-    <?php // Show the appropriate details ?>
-    $('.rep_type_details').hide();
-    switch (repType)
-    {
-      case <?php echo RepeatRule::WEEKLY ?>:
-        $('#rep_weekly').show();
-        break;
-      case <?php echo RepeatRule::MONTHLY ?>:
-        $('#rep_monthly').show();
-        break;
-      default:
-        break;
-    }
-  };
+const changeRepTypeDetails = function changeRepTypeDetails() {
+  const repType = parseInt($('input[name="rep_type"]:checked').val(), 10);
+  const isRepeat = (repType !== <?php echo RepeatRule::NONE ?>);
+  <?php
+  // Add a 'required' attribute to the rep_interval input to prevent users from entering an
+  // empty string.  But remove it if it's not a repeating entry, because if they happen
+  // to have an empty string they won't see the validation message, since the input will
+  // be hidden.
+  ?>
+  $('#rep_interval').prop('required', isRepeat);
+  <?php
+  // Add a 'required' attribute to the rep_end_date input if shown to prevent users
+  //  entering an empty string.  Show/hide the repeat end date and skip fields
+  ?>
+  $('#rep_end_date').prop('required', isRepeat).parent().toggle(isRepeat);
+  $('#skip').parent().toggle(isRepeat);
+  <?php // Show the appropriate details ?>
+  $('.rep_type_details').hide();
+  switch (repType)
+  {
+    case <?php echo RepeatRule::WEEKLY ?>:
+      $('#rep_weekly').show();
+      break;
+    case <?php echo RepeatRule::MONTHLY ?>:
+      $('#rep_monthly').show();
+      break;
+    default:
+      break;
+  }
+};
 
 
 <?php
 // Function to change the units for the repeat interval to match the repeat type.
 ?>
-var changeRepIntervalUnits = function changeRepIntervalUnits() {
-    var repType = parseInt($('input[name="rep_type"]:checked').val(), 10);
-    var repInterval = parseInt($('input[name="rep_interval"]').val(), 10);
-    var units = $('#interval_units');
-    var text;
-    switch (repType)
-    {
-      case <?php echo RepeatRule::DAILY ?>:
-        text = (repInterval === 1) ? '<?php echo get_js_vocab('day') ?>' : '<?php echo get_js_vocab('days') ?>';
-        break;
-      case <?php echo RepeatRule::WEEKLY ?>:
-        text = (repInterval === 1) ? '<?php echo get_js_vocab('week') ?>' : '<?php echo get_js_vocab('weeks') ?>';
-        break;
-      case <?php echo RepeatRule::MONTHLY ?>:
-        text = (repInterval === 1) ? '<?php echo get_js_vocab('month') ?>' : '<?php echo get_js_vocab('months') ?>';
-        break;
-      case <?php echo RepeatRule::YEARLY ?>:
-        text = (repInterval === 1) ? '<?php echo get_js_vocab('year_lc') ?>' : '<?php echo get_js_vocab('years') ?>';
-        break;
-      default:
-        text = units.text();
-        break;
-    }
-    units.text(text);
+const changeRepIntervalUnits = function changeRepIntervalUnits() {
+  const repType = parseInt($('input[name="rep_type"]:checked').val(), 10);
+  const repInterval = parseInt($('input[name="rep_interval"]').val(), 10);
+  const units = $('#interval_units');
+  let text;
+  switch (repType)
+  {
+    case <?php echo RepeatRule::DAILY ?>:
+      text = (repInterval === 1) ? '<?php echo get_js_vocab('day') ?>' : '<?php echo get_js_vocab('days') ?>';
+      break;
+    case <?php echo RepeatRule::WEEKLY ?>:
+      text = (repInterval === 1) ? '<?php echo get_js_vocab('week') ?>' : '<?php echo get_js_vocab('weeks') ?>';
+      break;
+    case <?php echo RepeatRule::MONTHLY ?>:
+      text = (repInterval === 1) ? '<?php echo get_js_vocab('month') ?>' : '<?php echo get_js_vocab('months') ?>';
+      break;
+    case <?php echo RepeatRule::YEARLY ?>:
+      text = (repInterval === 1) ? '<?php echo get_js_vocab('year') ?>' : '<?php echo get_js_vocab('years') ?>';
+      break;
+    default:
+      text = units.text();
+      break;
+  }
+  units.text(text);
 
-    units.parent().toggle(repType !== <?php echo RepeatRule::NONE ?>);
-  };
+  units.parent().toggle(repType !== <?php echo RepeatRule::NONE ?>);
+};
 
 
 // areaConfig returns the properties ('enable_periods', etc.) for an area,
 // by default the current area
-var areaConfig = function areaConfig(property, areaId) {
+const areaConfig = function areaConfig(property, areaId) {
 
-    var properties = ['enable_periods', 'n_periods', 'default_duration', 'max_duration_enabled',
-                      'max_duration_secs', 'max_duration_periods', 'max_duration_qty',
-                      'max_duration_units', 'timezone'];
-    var i, p, room;
+  const properties = ['enable_periods', 'n_periods', 'default_duration', 'max_duration_enabled',
+    'max_duration_secs', 'max_duration_periods', 'max_duration_qty',
+    'max_duration_units', 'timezone'];
+  let i, p, room;
 
-    if ($.inArray(property, properties) < 0)
-    {
-      throw new Error("areaConfig(): invalid property '" + property + "' passed to areaConfig");
-    }
+  if ($.inArray(property, properties) < 0)
+  {
+    throw new Error("areaConfig(): invalid property '" + property + "' passed to areaConfig");
+  }
 
-    if (areaId === undefined)
-    {
-      areaId = $('#area').val();
-    }
+  if (areaId === undefined)
+  {
+    areaId = $('#area').val();
+  }
 
-    if (areaConfig.data === undefined)
+  if (areaConfig.data === undefined)
+  {
+    areaConfig.data = [];
+  }
+  if (areaConfig.data[areaId] === undefined)
+  {
+    areaConfig.data[areaId] = {};
+    room = $('#rooms' + areaId);
+    for (i=0; i<properties.length; i++)
     {
-      areaConfig.data = [];
+      p = properties[i];
+      areaConfig.data[areaId][p] = room.data(p);
     }
-    if (areaConfig.data[areaId] === undefined)
-    {
-      areaConfig.data[areaId] = {};
-      room = $('#rooms' + areaId);
-      for (i=0; i<properties.length; i++)
-      {
-        p = properties[i];
-        areaConfig.data[areaId][p] = room.data(p);
-      }
-    }
-    return areaConfig.data[areaId][property];
-  };
+  }
+  return areaConfig.data[areaId][property];
+};
 
 
 <?php
@@ -165,9 +201,9 @@ function checkTimeSlots(jqDate)
 {
   if (!areaConfig('enable_periods'))
   {
-    var siblings = jqDate.siblings();
-    var select = jqDate.parent().parent().siblings('select:visible');
-    var slots = [];
+    const siblings = jqDate.siblings();
+    const select = jqDate.parent().parent().siblings('select:visible');
+    const slots = [];
     select.find('option').each(function() {
         slots.push($(this).val());
       });
@@ -175,13 +211,15 @@ function checkTimeSlots(jqDate)
     // We pass the id of the element as the request id so that we can match
     // the result to the request
     ?>
-    var params = {csrf_token: getCSRFToken(),
-                  id: select.attr('id'),
-                  day: parseInt(siblings.filter('input[id*="day"]').val(), 10),
-                  month: parseInt(siblings.filter('input[id*="month"]').val(), 10),
-                  year: parseInt(siblings.filter('input[id*="year"]').val(), 10),
-                  tz: areaConfig('timezone'),
-                  slots: slots};
+    const params = {
+      csrf_token: getCSRFToken(),
+      id: select.attr('id'),
+      day: parseInt(siblings.filter('input[id*="day"]').val(), 10),
+      month: parseInt(siblings.filter('input[id*="month"]').val(), 10),
+      year: parseInt(siblings.filter('input[id*="year"]').val(), 10),
+      tz: areaConfig('timezone'),
+      slots: slots
+    };
 
     if(args.site)
     {
@@ -208,20 +246,20 @@ function checkTimeSlots(jqDate)
 ?>
 function onAllDayClick()
 {
-  var form = $('#main');
+  const form = $('#main');
   if (form.length === 0)
   {
     return;
   }
 
-  var startSelect = form.find('#start_seconds'),
-      endSelect = form.find('#end_seconds'),
-      allDay = form.find('#all_day');
+  const startSelect = form.find('#start_seconds');
+  const endSelect = form.find('#end_seconds');
+  const allDay = form.find('#all_day');
 
-  var startDatepicker = form.find('#start_date'),
-      endDatepicker = form.find('#end_date');
+  const startDatepicker = form.find('#start_date');
+  const endDatepicker = form.find('#end_date');
 
-  var date, firstSlot, lastSlot;
+  let date, firstSlot, lastSlot;
 
   if (allDay.is(':checked')) // If checking the box...
   {
@@ -242,7 +280,7 @@ function onAllDayClick()
         (onAllDayClick.oldStartDatepicker === onAllDayClick.oldEndDatepicker))
     {
       <?php
-      // If the booking day spans midnight then the first and last slots
+      // If the booking day spans midnight, then the first and last slots
       // are going to be on different days.
       // This code works because new Date() with just a date string generates a UTC
       // date and toISOString() always returns a UTC datetime.
@@ -277,40 +315,33 @@ function onAllDayClick()
 }
 
 <?php
-// Set the error messages to be used for the various fields.     We do this twice:
+// Set the error messages to be used for the various fields.  We do this twice:
 // once to redefine the HTML5 error message and once for JavaScript alerts, for those
 // browsers not supporting HTML5 field validation.
 ?>
-function validationMessages()
+function validationMessages(areaId)
 {
-  var field, label;
+  let field, label;
   <?php
-  // First of all create a property in the vocab object for each of the mandatory
-  // fields.    The name and rooms field are implicitly mandatory.
+  // First, create a property in the vocab object for each of the mandatory fields.  The name and rooms field are
+  // implicitly mandatory.
   ?>
   validationMessages.vocab = {};
   validationMessages.vocab['name'] = '';
   validationMessages.vocab['rooms'] = '';
-  <?php
-  foreach ($is_mandatory_field as $key => $value)
+  for (const [fieldName, value] of Object.entries(mandatoryFields))
   {
-    if ($value)
+    if ((value === true) || (Array.isArray(value) && value.includes(parseInt(areaId))))
     {
-      list($table, $fieldname) = explode('.', $key, 2);
-      if ($table == 'entry')
-      {
-        $prefix = (in_array($fieldname, $standard_fields['entry'])) ? '' : VAR_PREFIX;
-        ?>
-        validationMessages.vocab['<?php echo escape_js($prefix . $fieldname) ?>'] = '';
-        <?php
-      }
+      validationMessages.vocab[fieldName] = '';
     }
   }
 
+  <?php
   // Then (a) fill each of those properties with an error message and (b) redefine
   // the HTML5 error message
   ?>
-  for (var key in validationMessages.vocab)
+  for (const key in validationMessages.vocab)
   {
     if (validationMessages.vocab.hasOwnProperty(key))
     {
@@ -372,9 +403,9 @@ function validationMessages()
 ?>
 function validate(form)
 {
-  var testInput = document.createElement("input");
-  var testSelect = document.createElement("select");
-  var validForm = true;
+  const testInput = document.createElement("input");
+  const testSelect = document.createElement("select");
+  let validForm = true;
 
   <?php
   // Mandatory fields (INPUT elements, except for checkboxes).
@@ -384,7 +415,7 @@ function validate(form)
   if (!("pattern" in testInput) || !("required" in testInput))
   {
     form.find('input').not('[type="checkbox"]').each(function() {
-      var id = $(this).attr('id');
+      const id = $(this).attr('id');
       if (validationMessages.vocab[id])
       {
         if (<?php echo REGEX_TEXT_NEG ?>.test($(this).val()))
@@ -408,7 +439,7 @@ function validate(form)
   if (!("required" in testInput))
   {
     form.find('input').filter('[type="checkbox"]').each(function() {
-      var id = $(this).attr('id');
+      const id = $(this).attr('id');
       if (validationMessages.vocab[id])
       {
         if (!$(this).is(':checked'))
@@ -432,7 +463,7 @@ function validate(form)
   // the browser will let through a string consisting only of whitespace.
   ?>
   form.find('textarea').each(function() {
-    var id = $(this).attr('id');
+    const id = $(this).attr('id');
     if (validationMessages.vocab[id])
     {
       if (<?php echo REGEX_TEXT_NEG ?>.test($(this).val()))
@@ -455,7 +486,7 @@ function validate(form)
   if (!("required" in testSelect))
   {
     form.find('select').each(function() {
-      var id = $(this).attr('id');
+      const id = $(this).attr('id');
       if (validationMessages.vocab[id])
       {
         if ($(this).val() === '')
@@ -473,7 +504,7 @@ function validate(form)
   }
 
   <?php // Check that the start date is not after the end date ?>
-  var dateDiff = getDateDifference();
+  const dateDiff = getDateDifference();
   if (dateDiff < 0)
   {
     window.alert("<?php echo get_js_vocab('start_after_end_long')?>");
@@ -481,7 +512,7 @@ function validate(form)
   }
 
   <?php // Repeat checks ?>
-  var repType = form.find('input:radio[name=rep_type]:checked').val();
+  const repType = form.find('input:radio[name=rep_type]:checked').val();
   if ((repType !== undefined) && (parseInt(repType, 10) !== <?php echo RepeatRule::NONE ?>))
   {
     <?php
@@ -498,20 +529,30 @@ function validate(form)
     // Check that the repeat end date has been set (people often forget to do so).  If it's the
     // same as the entry end date then it probably hasn't.
     ?>
-    if ($('input[name="rep_end_date"]').val() === $('input[name="end_date"]').val())
+    const repEndDate = $('input[name="rep_end_date"]').val();
+    if (repEndDate === $('input[name="end_date"]').val())
     {
       if (!window.confirm("<?php echo get_js_vocab('confirm_rep_end_date') ?>"))
       {
         return false;
       }
     }
+    <?php
+    // Check that the repeat end date is not before the start date.  If it is, nothing
+    // will be booked, which is probably not what was intended.
+    ?>
+    if (repEndDate < $('input[name="start_date"]').val())
+    {
+      window.alert("<?php echo get_js_vocab('rep_end_date_before_start_date') ?>");
+      return false;
+    }
   }
 
   <?php
   // Form submit can take some time, especially if mails are enabled and
   // there are more than one recipient. To avoid users doing weird things
-  // like clicking more than one time on submit button, we hide it as soon
-  // it is clicked.
+  // like clicking more than once on the submit button, we hide it as soon
+  // as it is clicked.
   ?>
   form.find('input[type=submit]').prop('disabled', true);
 
@@ -536,7 +577,7 @@ function checkConflicts(optional)
   <?php // Get the value of the field in the form ?>
   function getFormValue(formInput)
   {
-    var value;
+    let value;
     <?php
     // Scalar parameters (three types - checkboxes, radio buttons and the rest)
     ?>
@@ -565,8 +606,8 @@ function checkConflicts(optional)
       formInput.each(function() {
           if ((formInput.filter(':checkbox').length === 0) || $(this).is(':checked'))
           {
-            var thisValue = $(this).val();
-            if ($.isArray(thisValue))
+            const thisValue = $(this).val();
+            if (Array.isArray(thisValue))
             {
               $.merge(value, thisValue);
             }
@@ -606,10 +647,10 @@ function checkConflicts(optional)
   // button - but how can you tell that it was the clicking of the submit button that
   // caused the change event?]
   ?>
-  var timeout = 200; <?php // ms ?>
+  const timeout = 200; <?php // ms ?>
   window.setTimeout(function() {
-    var params = {};
-    var form = $('form#main');
+    const params = {};
+    const form = $('form#main');
     <?php
     // Don't do anything if (a) the form doesn't exist (which it won't if the user
     // hasn't logged in) or (b) if the submit button has been pressed
@@ -619,23 +660,41 @@ function checkConflicts(optional)
       return;
     }
 
+    // Some browsers, eg Firefox, allow a 'multiple' select element to have nothing selected,
+    // even though it has the required attribute. This won't happen when the form is submitted,
+    // but can happen when the user is selecting options. If this happens when there is no option
+    // selected, then don't bother checking for conflicts because the data are obviously
+    // meaningless.  An example is the rooms[] field.
+    let requiredSelectsComplete = true;
+    form.find('select:required').not(':disabled').each(function() {
+      if ($(this).prop('multiple') && ($(this).val().length === 0))
+      {
+        requiredSelectsComplete = false;
+        return false; // break out of the .each loop
+      }
+    });
+    if (!requiredSelectsComplete)
+    {
+      return;
+    }
+
     <?php
     // Load the params object with the values of all the form fields that are not
     // disabled and are not submit buttons of one kind or another
     ?>
-    var relevantFields = form.find('[name]').not(':disabled, [type="submit"], [type="button"], [type="image"]');
+    const relevantFields = form.find('[name]').not(':disabled, [type="submit"], [type="button"], [type="image"]');
     relevantFields.each(function() {
-        <?php
-        // Go through each of the fields and if we haven't got the value for a name
-        // then go and get it.  (Remember that arrays can give more than one field
-        // with the same name
-        ?>
-        var fieldName = $(this).attr('name');
-        if (params[fieldName] === undefined)
-        {
-          params[fieldName] = getFormValue(relevantFields.filter('[name=' + fieldName.replace('[', '\\[').replace(']', '\\]') + ']'));
-        }
-      });
+      <?php
+      // Go through each of the fields and if we haven't got the value for a name
+      // then go and get it.  (Remember that arrays can give more than one field
+      // with the same name
+      ?>
+      const fieldName = $(this).attr('name');
+      if (params[fieldName] === undefined)
+      {
+        params[fieldName] = getFormValue(relevantFields.filter('[name=' + fieldName.replace('[', '\\[').replace(']', '\\]') + ']'));
+      }
+    });
 
     <?php
     // For some reason I don't understand, posting an empty array will
@@ -643,11 +702,11 @@ function checkConflicts(optional)
     // that problem, delete the property if the array (really an object) is empty
     ?>
     $.each(params, function(i, val) {
-        if ((typeof(val) === 'object') && ((val === null) || (val.length === 0)))
-        {
-          delete params[i];
-        }
-      });
+      if ((typeof(val) === 'object') && ((val === null) || (val.length === 0)))
+      {
+        delete params[i];
+      }
+    });
 
     if(args.site)
     {
@@ -667,10 +726,10 @@ function checkConflicts(optional)
         else {
           $('#checks').show();
           checkConflicts.nOutstanding--;
-          var conflictDiv = $('#conflict_check');
-          var scheduleDetails = $('#schedule_details');
-          var policyDetails = $('#policy_details');
-          var titleText, detailsHTML;
+          const conflictDiv = $('#conflict_check');
+          const scheduleDetails = $('#schedule_details');
+          const policyDetails = $('#policy_details');
+          let titleText, detailsHTML;
           if (result.conflicts.length === 0)
           {
             conflictDiv.attr('class', 'good');
@@ -683,7 +742,7 @@ function checkConflicts(optional)
             detailsHTML = "<p>";
             titleText = '<?php echo escape_js(html_entity_decode(get_vocab("conflict"))) ?>' + "\n\n";
             detailsHTML += titleText + "<\/p>";
-            var conflictsList = getErrorList(result.conflicts);
+            const conflictsList = getErrorList(result.conflicts);
             detailsHTML += conflictsList.html;
             titleText += conflictsList.text;
           }
@@ -696,8 +755,8 @@ function checkConflicts(optional)
           // notices (this happens when an admin user makes a booking that an ordinary user
           // would not be allowed to); otherwise "bad".  Content and styling are supplied by CSS.
           ?>
-          var policyDiv = $('#policy_check');
-          var rulesList;
+          const policyDiv = $('#policy_check');
+          let rulesList;
           if (result.violations.errors.length === 0)
           {
             if (result.violations.notices.length === 0)
@@ -739,12 +798,12 @@ function checkConflicts(optional)
 // Get the current vocab (in the appropriate language) for periods,
 // minutes, hours and days
 ?>
-var vocab = {};
-vocab.periods = {singular: '<?php echo get_js_vocab("period_lc") ?>',
+const vocab = {};
+vocab.periods = {singular: '<?php echo get_js_vocab("period") ?>',
                  plural:   '<?php echo get_js_vocab("periods") ?>'};
-vocab.minutes = {singular: '<?php echo get_js_vocab("minute_lc") ?>',
+vocab.minutes = {singular: '<?php echo get_js_vocab("minute") ?>',
                  plural:   '<?php echo get_js_vocab("minutes") ?>'};
-vocab.hours   = {singular: '<?php echo get_js_vocab("hour_lc") ?>',
+vocab.hours   = {singular: '<?php echo get_js_vocab("hour") ?>',
                  plural:   '<?php echo get_js_vocab("hours") ?>'};
 vocab.days    = {singular: '<?php echo get_js_vocab("day") ?>',
                  plural:   '<?php echo get_js_vocab("days") ?>'};
@@ -755,11 +814,11 @@ vocab.days    = {singular: '<?php echo get_js_vocab("day") ?>',
 ?>
 function durFormat(r)
 {
-  var lastChar;
+  let lastChar;
 
   r = r.toFixed(2);
   r = parseFloat(r);
-  r = r.toLocaleString();
+  r = r.toLocaleString(args.langPrefs);
 
   if ((r.indexOf('.') >= 0) || (r.indexOf(',') >= 0))
   {
@@ -789,12 +848,12 @@ function durFormat(r)
 ?>
 function getDuration(from, to, days)
 {
-  var duration, durUnits;
-  var text = '';
-  var currentArea = $('#area').data('current');
-  var enablePeriods = areaConfig('enable_periods');
-  var durDays;
-  var minutesPerDay = <?php echo MINUTES_PER_DAY ?>;
+  let duration, durUnits;
+  let text = '';
+  const currentArea = $('#area').data('current');
+  const enablePeriods = areaConfig('enable_periods');
+  let durDays;
+  const minutesPerDay = <?php echo MINUTES_PER_DAY ?>;
 
 
   durUnits = (enablePeriods) ? '<?php echo "periods" ?>' : '<?php echo "minutes" ?>';
@@ -853,15 +912,15 @@ function getDuration(from, to, days)
 ?>
 function getDateDifference()
 {
-  var diff,
-      secondsPerDay = <?php echo SECONDS_PER_DAY ?>,
-      start = $('#start_date').val().split('-'),
-      startDate = new Date(parseInt(start[0], 10),
-                           parseInt(start[1], 10) - 1,
-                           parseInt(start[2], 10),
-                           12),
-      endDate = $('#end_date'),
-      end;
+  let diff;
+  const secondsPerDay = <?php echo SECONDS_PER_DAY ?>;
+  const start = $('#start_date').val().split('-');
+  const startDate = new Date(parseInt(start[0], 10),
+    parseInt(start[1], 10) - 1,
+    parseInt(start[2], 10),
+    12);
+  let endDate = $('#end_date');
+  let end;
 
   if (endDate.length === 0)
   {
@@ -905,31 +964,28 @@ function adjustWidth(a, b)
   ?>
   a.css({width: "auto"});
   b.css({width: "auto"});
-  var aWidth = a.width();
-  var bWidth = b.width();
-  var maxWidth = Math.max(aWidth, bWidth) + 2;
+  const maxWidth = Math.max(a.width(), b.width()) + 2;
   a.width(maxWidth);
   b.width(maxWidth);
 }
 
 
-var reloadSlotSelector = function reloadSlotSelector(select, area) {
-    select.html($('#' + select.attr('id') + area).html())
-          .val(select.data('current'));
-  };
+const reloadSlotSelector = function reloadSlotSelector(select, area) {
+  select.html($('#' + select.attr('id') + area).html())
+    .val(select.data('current'));
+};
 
 
-var updateSelectorData = function updateSelectorData(){
-    var selectors = ['area', 'start_seconds', 'end_seconds'];
-    var i, select;
+const updateSelectorData = function updateSelectorData(){
+  const selectors = ['area', 'start_seconds', 'end_seconds'];
 
-    for (i=0; i<selectors.length; i++)
-    {
-      select = $('#' + selectors[i]);
-      select.data('previous', select.data('current'));
-      select.data('current', select.val());
-    }
-  };
+  for (const selector of selectors)
+  {
+    const select = $('#' + selector);
+    select.data('previous', select.data('current'));
+    select.data('current', select.val());
+  }
+};
 
 
 function adjustSlotSelectors()
@@ -946,27 +1002,27 @@ function adjustSlotSelectors()
   //     to have a go at finding a time/period in the new area as close
   //     as possible to the one that was selected in the old area.
   ?>
-  var area = $('#area'),
-      oldArea = area.data('previous'),
-      currentArea = area.data('current');
+  const area = $('#area');
+  const oldArea = area.data('previous');
+  const currentArea = area.data('current');
 
-  var enablePeriods    = areaConfig('enable_periods'),
-      oldEnablePeriods = areaConfig('enable_periods', oldArea),
-      defaultDuration  = areaConfig('default_duration');
+  const enablePeriods = areaConfig('enable_periods');
+  const oldEnablePeriods = areaConfig('enable_periods', oldArea);
+  const defaultDuration = areaConfig('default_duration');
 
-  var startSelect = $('#start_seconds'),
-      endSelect = $('#end_seconds'),
-      allDay = $('#all_day');
+  const startSelect = $('#start_seconds');
+  const endSelect = $('#end_seconds');
+  const allDay = $('#all_day');
 
-  var startKeepDisabled = startSelect.hasClass('keep_disabled'),
-      endKeepDisabled = endSelect.hasClass('keep_disabled'),
-      allDayKeepDisabled = allDay.hasClass('keep_disabled');
+  const startKeepDisabled = startSelect.hasClass('keep_disabled');
+  const endKeepDisabled = endSelect.hasClass('keep_disabled');
+  const allDayKeepDisabled = allDay.hasClass('keep_disabled');
 
-  var oldStartValue = parseInt(startSelect.data('previous'), 10),
-      oldEndValue = parseInt(endSelect.data('previous'), 10);
+  const oldStartValue = parseInt(startSelect.data('previous'), 10);
+  const oldEndValue = parseInt(endSelect.data('previous'), 10);
 
-  var nbsp = '\u00A0',
-      startValue, endValue, firstValue, lastValue, optionClone;
+  const nbsp = '\u00A0';
+  let startValue, endValue, firstValue, lastValue, optionClone;
 
   if (startSelect.length === 0)
   {
@@ -1004,8 +1060,8 @@ function adjustSlotSelectors()
     // We will try and be conservative and find a start time that includes the previous start time
     // and an end time that includes the previous end time.   This means that by default the
     // booking period will include the old booking period (unless we've hit the start or
-    // end of day).   But it does mean that as you switch between areas the booking period
-    // tends to get bigger:  if you switch fromn Area 1 to Area 2 and then back again it's
+    // end of the day).  But it does mean that as you switch between areas, the booking period
+    // tends to get bigger: if you switch from Area 1 to Area 2 and then back again it's
     // possible that the booking period for Area 1 is longer than it was originally.
     ?>
     if (oldEnablePeriods === enablePeriods)
@@ -1035,9 +1091,9 @@ function adjustSlotSelectors()
     }
     <?php
     // The modes are different, so it doesn't make any sense to match up old and new
-    // times/periods.   The best we can do is choose some sensible defaults, which
+    // times/periods.   The best we can do is to choose some sensible defaults, which
     // is to set the start to the first possible start, and the end to the start + the
-    // default duration (or the last possible end value if that is less)
+    // default duration (or the last possible end value if that is less).
     ?>
     else
     {
@@ -1071,7 +1127,7 @@ function adjustSlotSelectors()
     }
   }
 
-  var dateDifference = getDateDifference();
+  const dateDifference = getDateDifference();
 
   <?php
   // If All Day isn't checked then we need to work out whether the start
@@ -1081,7 +1137,7 @@ function adjustSlotSelectors()
   ?>
   if (!allDay.is(':checked'))
   {
-    var newState = (dateDifference < 0);
+    const newState = (dateDifference < 0);
     if (newState || startKeepDisabled)
     {
       startSelect.prop('disabled', true);
@@ -1120,82 +1176,81 @@ function adjustSlotSelectors()
 
   $('#end_seconds' + currentArea).find('option').each(function(i) {
 
-      var thisValue = parseInt($(this).val(), 10),
-          nPeriods           = areaConfig('n_periods'),
-          maxDurationEnabled = areaConfig('max_duration_enabled'),
-          maxDurationSecs    = areaConfig('max_duration_secs'),
-          maxDurationPeriods = areaConfig('max_duration_periods'),
-          maxDurationQty     = areaConfig('max_duration_qty'),
-          maxDurationUnits   = areaConfig('max_duration_units'),
-          secondsPerDay      = <?php echo SECONDS_PER_DAY ?>,
-          duration,
-          maxDuration;
+    const thisValue = parseInt($(this).val(), 10);
+    const nPeriods = areaConfig('n_periods');
+    const maxDurationEnabled = areaConfig('max_duration_enabled');
+    const maxDurationSecs = areaConfig('max_duration_secs');
+    const maxDurationPeriods = areaConfig('max_duration_periods');
+    const maxDurationQty = areaConfig('max_duration_qty');
+    const maxDurationUnits = areaConfig('max_duration_units');
+    const secondsPerDay      = <?php echo SECONDS_PER_DAY ?>;
+    let duration, maxDuration;
 
-      <?php
-      // Limit the end slots to the maximum duration if that is enabled, if the
-      // user is not a booking admin
-      ?>
-      if (!isBookAdmin)
+    <?php
+    // Limit the end slots to the maximum duration if that is enabled, if the
+    // user is not a booking admin
+    ?>
+    if (!isBookAdmin)
+    {
+      if (maxDurationEnabled)
       {
-        if (maxDurationEnabled)
+        <?php
+        // Calculate the duration in periods or seconds
+        ?>
+        duration =  thisValue - startValue;
+        if (enablePeriods)
         {
-          <?php
-          // Calculate the duration in periods or seconds
-          ?>
-          duration =  thisValue - startValue;
-          if (enablePeriods)
-          {
-            duration = duration/60 + 1;  <?php // because of the way periods work ?>
-            duration += dateDifference * nPeriods;
-          }
-          else
-          {
-            duration += dateDifference * secondsPerDay;
-          }
-          maxDuration = (enablePeriods) ? maxDurationPeriods : maxDurationSecs;
-          if (duration > maxDuration)
-          {
-            if (i === 0)
-            {
-              endSelect.append($(this).val(thisValue).text(nbsp));
-              var errorMessage = '<?php echo get_js_vocab("max_booking_duration") ?>' + nbsp;
-              if (enablePeriods)
-              {
-                errorMessage += maxDurationPeriods + nbsp;
-                errorMessage += (maxDurationPeriods > 1) ? vocab.periods.plural : vocab.periods.singular;
-              }
-              else
-              {
-                errorMessage += maxDurationQty + nbsp + maxDurationUnits;
-              }
-              $('#end_time_error').text(errorMessage);
-            }
-            else
-            {
-              return false;
-            }
-          }
-        }
-      }
-
-      if ((thisValue > startValue) ||
-          ((thisValue === startValue) && enablePeriods) ||
-          (dateDifference !== 0))
-      {
-        optionClone = $(this).clone();
-        if (dateDifference < 0)
-        {
-          optionClone.text('<?php echo get_js_vocab("start_after_end")?>');
+          duration = duration/60 + 1;  <?php // because of the way periods work ?>
+          duration += dateDifference * nPeriods;
         }
         else
         {
-          optionClone.text($(this).text() + nbsp + nbsp +
-                           '(' + getDuration(startValue, thisValue, dateDifference) +
-                           ')');
+          duration += dateDifference * secondsPerDay;
         }
-        endSelect.append(optionClone);
+        maxDuration = (enablePeriods) ? maxDurationPeriods : maxDurationSecs;
+        if (duration > maxDuration)
+        {
+          if (i === 0)
+          {
+            endSelect.append($(this).val(thisValue).text(nbsp));
+            let errorMessage = '<?php echo get_js_vocab("max_booking_duration") ?>' + nbsp;
+            if (enablePeriods)
+            {
+              errorMessage += maxDurationPeriods + nbsp;
+              errorMessage += (maxDurationPeriods > 1) ? vocab.periods.plural : vocab.periods.singular;
+            }
+            else
+            {
+              errorMessage += maxDurationQty + nbsp + maxDurationUnits;
+            }
+            $('#end_time_error').text(errorMessage);
+          }
+          else
+          {
+            return false;
+          }
+        }
       }
-    });
+    }
+
+    if ((thisValue > startValue) ||
+        ((thisValue === startValue) && enablePeriods) ||
+        (dateDifference !== 0))
+    {
+      optionClone = $(this).clone();
+      if (dateDifference < 0)
+      {
+        optionClone.text('<?php echo get_js_vocab("start_after_end")?>');
+      }
+      else
+      {
+        optionClone.text($(this).text() + nbsp + nbsp +
+                         '(' + getDuration(startValue, thisValue, dateDifference) +
+                         ')');
+      }
+      endSelect.append(optionClone);
+    }
+  });
 
   firstValue = parseInt(endSelect.find('option').first().val(), 10);
   lastValue = parseInt(endSelect.find('option').last().val(), 10);
@@ -1225,23 +1280,23 @@ function adjustSlotSelectors()
 } <?php // function adjustSlotSelectors() ?>
 
 
-var editEntryVisChanged = function editEntryVisChanged() {
-    <?php
-    // Clear the conflict timer and then restart it.   We want
-    // a check to be performed immediately the page becomes
-    // visible again.
-    ?>
-    conflictTimer(false);
-    conflictTimer(true);
-  };
+const editEntryVisChanged = function editEntryVisChanged() {
+  <?php
+  // Clear the conflict timer and then restart it.   We want
+  // a check to be performed immediately the page becomes
+  // visible again.
+  ?>
+  conflictTimer(false);
+  conflictTimer(true);
+};
 
 
 function populateFromSessionStorage(form)
 {
-  var storedData = sessionStorage.getItem('form_data');
+  const storedData = sessionStorage.getItem('form_data');
   if (storedData)
   {
-    var form_data = JSON.parse(storedData);
+    const form_data = JSON.parse(storedData);
 
     <?php
     // Before we populate the form we have to set the area select to the correct
@@ -1257,7 +1312,7 @@ function populateFromSessionStorage(form)
     });
 
     <?php // Now iterate through the data again and populate the form ?>
-    var selects = {};
+    const selects = {};
 
     $.each(form_data, function (index, field)
     {
@@ -1267,9 +1322,15 @@ function populateFromSessionStorage(form)
         return;
       }
 
-      var el = $('[name="' + field.name + '"]'),
-        tagName = el.prop('tagName'),
-        type;
+      const el = $('[name="' + field.name + '"]');
+      const tagName = el.prop('tagName');
+      let type;
+
+      <?php // Some of the variables, eg 'top', won't have a corresponding field ?>
+      if (tagName === undefined)
+      {
+        return;
+      }
 
       <?php
       // If it's a select element then these can be multi-valued.  If we just do
@@ -1313,7 +1374,7 @@ function populateFromSessionStorage(form)
     });
 
     <?php // Now assign values to the selects ?>
-    for (var property in selects)
+    for (const property in selects)
     {
       $('[name="' + property + '"]').val(selects[property]).change();
     }
@@ -1326,8 +1387,8 @@ function populateFromSessionStorage(form)
       //   <datalist id="yyy">
       // and we want to copy the value from the hidden input to the visible one
       ?>
-      var prev1 = $(this).prev();
-      var prev2 = prev1.prev();
+      const prev1 = $(this).prev();
+      const prev2 = prev1.prev();
       if ($(this).attr('id') === prev2.attr('list'))
       {
         prev2.val(prev1.val());
@@ -1355,12 +1416,10 @@ $(document).on('page_ready', function() {
 
   isBookAdmin = args.isBookAdmin;
 
-  var form = $('#main'),
-      areaSelect = $('#area'),
-      startAndEndDates = $('#start_date, #end_date'),
-      startSelect,
-      endSelect,
-      allDay;
+  const form = $('#main');
+  let areaSelect = $('#area');
+  const startAndEndDates = $('#start_date, #end_date');
+  let startSelect, endSelect, allDay;
 
   <?php
   // If there's only one enabled area in the database there won't be an area
@@ -1392,26 +1451,50 @@ $(document).on('page_ready', function() {
       .data('current', areaSelect.val())
       .data('previous', areaSelect.val())
       .on('change', function() {
-          var newArea = $(this).val();
+        const newArea = $(this).val();
 
-          updateSelectorData();
+        updateSelectorData();
 
-          <?php // Switch room selects ?>
-          var roomSelect = $('#rooms');
-          roomSelect.html($('#rooms' + newArea).html());
+        <?php // Switch room selects ?>
+        const roomSelect = $('#rooms');
+        roomSelect.html($('#rooms' + newArea).html());
 
-          <?php // Switch start time select ?>
-          reloadSlotSelector($('#start_seconds'), newArea);
+        <?php // Switch start time select ?>
+        reloadSlotSelector($('#start_seconds'), newArea);
 
-          <?php // Switch all day checkbox ?>
-          var allDayCheckbox = $('#all_day');
-          allDayCheckbox.html($('#all_day' + newArea).html());
+        <?php // Switch all day checkbox ?>
+        const allDayCheckbox = $('#all_day');
+        allDayCheckbox.html($('#all_day' + newArea).html());
 
-          <?php // Switch end time select ?>
-          reloadSlotSelector($('#end_seconds'), newArea);
+        <?php // Switch end time select ?>
+        reloadSlotSelector($('#end_seconds'), newArea);
 
-          adjustSlotSelectors();
-        });
+        <?php
+        // For each field which is only mandatory for some areas (i.e. the $is_mandatory_field value is an array),
+        // check whether the new area is in the array, and if so, add the required attribute, otherwise remove it.
+        ?>
+        for (const [fieldName, value] of Object.entries(mandatoryFields))
+        {
+          if (Array.isArray(value))
+          {
+            const field = $('[name="' + fieldName + '"]');
+            if (value.includes(parseInt(newArea)))
+            {
+              field.prop('required', true);
+            }
+            else
+            {
+              field.prop('required', false);
+              <?php // Clear any existing error messages ?>
+              field[0].setCustomValidity('');
+            }
+          }
+        }
+
+        <?php // Reset the validation messages ?>
+        validationMessages(newArea);
+        adjustSlotSelectors();
+      });
 
   $('input[name="all_day"]').on('click', function() {
       onAllDayClick();
@@ -1456,15 +1539,13 @@ $(document).on('page_ready', function() {
     onAllDayClick.oldEndDatepicker = form.find('#end_date').val();
   }
 
-
-
   <?php
   // Set up the validation messages, but only if the function exists (which it
   // won't if we're on the login page)
   ?>
   if (typeof validationMessages === 'function')
   {
-    validationMessages();
+    validationMessages(args.area);
   }
 
   <?php
@@ -1473,13 +1554,13 @@ $(document).on('page_ready', function() {
   // triggered by a Submit button being pressed, and if so, not to send an Ajax request.
   ?>
   form.find('[type="submit"], [type="button"], [type="image"]').on('click', function() {
-    var trigger = $(this).attr('name');
+    const trigger = $(this).attr('name');
     $(this).closest('form').data('submit', trigger);
   });
 
   form.on('submit', function()
   {
-    var result = true;
+    let result = true;
     if ($(this).data('submit') === 'save_button')
     {
       <?php // Only validate the form if the Save button was pressed ?>
@@ -1503,6 +1584,28 @@ $(document).on('page_ready', function() {
   });
 
   <?php
+  // When the start date changes, change the minDate on the repeat end date datepicker to match.
+  ?>
+  $('#start_date').on('change', function() {
+    const rep_end_date_selector = '#rep_end_date';
+    const start_date = $(this).val();
+    const old_rep_end_date = $(rep_end_date_selector).val();
+    const fp = document.querySelector(rep_end_date_selector)._flatpickr;
+    fp.set('minDate', start_date);
+    // Note that although the flatpickr documentation says this should work on mobiles, it doesn't seem to.
+    // So we manually set the 'min' attribute for mobiles.
+    $(rep_end_date_selector).next('.flatpickr-input.flatpickr-mobile').attr('min', start_date);
+    <?php
+    // And if the old flatpickr date was less than the new minimum, set the flatpickr to the minimum,
+    // otherwise it will show a blank field.
+    ?>
+    if (old_rep_end_date < start_date)
+    {
+      fp.setDate(start_date);
+    }
+  });
+
+  <?php
   // Add a change event handler to each of the form fields - except for those that
   // are disabled and anything that might be a submit button - so that when they change
   // the validity of the booking is re-checked.   (This probably causes more checking
@@ -1514,7 +1617,7 @@ $(document).on('page_ready', function() {
   // Use a click event for checkboxes as it seems that in some browsers the event fires
   // before the value is changed.
   ?>
-  var formFields = form.find('input.date, [name]').not(':disabled, [type="submit"], [type="button"], [type="image"]');
+  const formFields = form.find('input.date, [name]').not(':disabled, [type="submit"], [type="button"], [type="image"]');
   formFields.filter(':checkbox')
             .on('click', function() {
                 checkConflicts();
@@ -1530,16 +1633,16 @@ $(document).on('page_ready', function() {
   // dialog box we add an extra tab where we're going to put the dialog close
   // button and then we hide the dialog itself
   ?>
-  var tabsHTML =
-'<div id="check_tabs">' +
-'<ul id="details_tabs">' +
-'<li><a href="#schedule_details"><?php echo get_js_vocab('schedule') ?></a></li>' +
-'<li><a href="#policy_details"><?php echo get_js_vocab('policy') ?></a></li>' +
-'<li id="ui-tab-dialog-close"></li>' +
-'</ul>' +
-'<div id="schedule_details"></div>' +
-'<div id="policy_details"></div>' +
-'</div>';
+  const tabsHTML =
+    '<div id="check_tabs">' +
+    '<ul id="details_tabs">' +
+    '<li><a href="#schedule_details"><?php echo get_js_vocab('schedule') ?></a></li>' +
+    '<li><a href="#policy_details"><?php echo get_js_vocab('policy') ?></a></li>' +
+    '<li id="ui-tab-dialog-close"></li>' +
+    '</ul>' +
+    '<div id="schedule_details"></div>' +
+    '<div id="policy_details"></div>' +
+    '</div>';
 
   $('<div>').attr('id', 'check_results')
             .css('display', 'none')
@@ -1547,65 +1650,64 @@ $(document).on('page_ready', function() {
             .appendTo(form);
 
   $('#conflict_check, #policy_check').on('click', function manageTabs() {
-      var tabId,
-          tabIndex,
-          checkResults = $('#check_results'),
-          checkTabs = $('#check_tabs');
-      <?php
-      // Work out which tab should be selected
-      // (Slightly long-winded using a switch, but there may be more tabs in future)
-      ?>
-      switch ($(this).attr('id'))
-      {
-        case 'policy_check':
-          tabId = 'policy_details';
-          break;
-        case 'conflict_check':
-        default:
-          tabId = 'schedule_details';
-          break;
-      }
-      tabIndex = $('#details_tabs a[href="#' + tabId + '"]').parent().index();
+    let tabId, tabIndex;
+    const checkResults = $('#check_results');
+    const checkTabs = $('#check_tabs');
+    <?php
+    // Work out which tab should be selected
+    // (Slightly long-winded using a switch, but there may be more tabs in future)
+    ?>
+    switch ($(this).attr('id'))
+    {
+      case 'policy_check':
+        tabId = 'policy_details';
+        break;
+      case 'conflict_check':
+      default:
+        tabId = 'schedule_details';
+        break;
+    }
+    tabIndex = $('#details_tabs a[href="#' + tabId + '"]').parent().index();
 
-      <?php
-      // If we've already created the dialog and tabs, then all we have
-      // to do is re-open the dialog if it has previously been closed and
-      // select the tab corresponding to the div that was clicked
-      ?>
-      if (manageTabs.alreadyExists)
+    <?php
+    // If we've already created the dialog and tabs, then all we have
+    // to do is re-open the dialog if it has previously been closed and
+    // select the tab corresponding to the div that was clicked
+    ?>
+    if (manageTabs.alreadyExists)
+    {
+      if (!checkResults.dialog("isOpen"))
       {
-        if (!checkResults.dialog("isOpen"))
-        {
-          checkResults.dialog("open");
-        }
-        checkTabs.tabs('option', 'active', tabIndex);
-        return;
+        checkResults.dialog("open");
       }
-      <?php
-      // We want to create a set of tabs that appear inside a dialog box,
-      // with the whole structure being draggable.   Thanks to dbroox at
-      // http://forum.jquery.com/topic/combining-ui-dialog-and-tabs for the solution.
-      ?>
-      checkTabs.tabs();
       checkTabs.tabs('option', 'active', tabIndex);
-      checkResults.dialog({'width': 400,
-                           'height': 200,
-                           'minWidth': 300,
-                           'minHeight': 150,
-                           'draggable': true});
-      <?php //steal the close button ?>
-      var detailsTabs = $('#details_tabs');
-      detailsTabs.append($('button.ui-dialog-titlebar-close'));
-      <?php //move the tabs out of the content and make them draggable ?>
-      $('.ui-dialog').addClass('ui-tabs')
-                     .prepend(detailsTabs)
-                     .draggable('option', 'handle', '#details_tabs');
-      <?php //switch the titlebar class ?>
-      $('.ui-dialog-titlebar').remove();
-      detailsTabs.addClass('ui-dialog-titlebar');
+      return;
+    }
+    <?php
+    // We want to create a set of tabs that appear inside a dialog box,
+    // with the whole structure being draggable.   Thanks to dbroox at
+    // http://forum.jquery.com/topic/combining-ui-dialog-and-tabs for the solution.
+    ?>
+    checkTabs.tabs();
+    checkTabs.tabs('option', 'active', tabIndex);
+    checkResults.dialog({'width': 400,
+                         'height': 200,
+                         'minWidth': 300,
+                         'minHeight': 150,
+                         'draggable': true});
+    <?php //steal the close button ?>
+    const detailsTabs = $('#details_tabs');
+    detailsTabs.append($('button.ui-dialog-titlebar-close'));
+    <?php //move the tabs out of the content and make them draggable ?>
+    $('.ui-dialog').addClass('ui-tabs')
+                   .prepend(detailsTabs)
+                   .draggable('option', 'handle', '#details_tabs');
+    <?php //switch the titlebar class ?>
+    $('.ui-dialog-titlebar').remove();
+    detailsTabs.addClass('ui-dialog-titlebar');
 
-      manageTabs.alreadyExists=true;
-    });
+    manageTabs.alreadyExists=true;
+  });
 
   <?php
   // Finally, set a timer so that conflicts are periodically checked for,
@@ -1624,7 +1726,7 @@ $(document).on('page_ready', function() {
     //     the case if multi-day bookings are not allowed)
     ?>
 
-    var endDate = $('#end_date');
+    const endDate = $('#end_date');
 
     if ($(this).attr('id') === 'start_date')
     {
@@ -1641,8 +1743,8 @@ $(document).on('page_ready', function() {
     ?>
     if (getDateDifference() < 0)
     {
-      var selector = ($(this).attr('id') === 'start_date') ? '#end_date' : '#start_date';
-      var fp = document.querySelector(selector)._flatpickr;
+      const selector = ($(this).attr('id') === 'start_date') ? '#end_date' : '#start_date';
+      const fp = document.querySelector(selector)._flatpickr;
       fp.setDate($(this).val());
     }
 
@@ -1667,8 +1769,8 @@ $(document).on('page_ready', function() {
   });
 
   startAndEndDates.each(function() {
-      checkTimeSlots($(this));
-    });
+    checkTimeSlots($(this));
+  });
 
   $('input[name="rep_interval"]').on('change', changeRepIntervalUnits);
 
@@ -1682,7 +1784,7 @@ $(document).on('page_ready', function() {
   // state.  We can then suspend Ajax checking when the page is
   // hidden to save on server, client and network load.
   ?>
-  var prefix = visibilityPrefix();
+  const prefix = visibilityPrefix();
   if (document.addEventListener &&
       (prefix !== null))
   {
@@ -1693,11 +1795,11 @@ $(document).on('page_ready', function() {
 
   <?php
   // Put the booking name field in focus (but only for new bookings,
-  // ie when the field is empty:  if it's a new booking you have to
-  // complete that field, but if it's an existing booking you might
+  // ie when the field is empty: if it's a new booking, you have to
+  // complete that field; but if it's an existing booking, you might
   // want to edit any field)
   ?>
-  var nameInput = form.find('#name');
+  const nameInput = form.find('#name');
 
   if (nameInput.length && !(nameInput.prop('disabled') || nameInput.val().length))
   {
@@ -1712,24 +1814,23 @@ $(document).on('page_ready', function() {
   // is checked we need to trigger a change event on them so that they set their own
   // disabled properties appropriately.
   ?>
-  var allowRegistration = $('#allow_registration');
+  const allowRegistration = $('#allow_registration');
   allowRegistration.on('change', function() {
-      var registration = $('#registration');
-      var allowRegistrationChecked = $(this).is(':checked');
-      registration.find('input, select').not($(this)).prop('disabled', !allowRegistrationChecked);
-      if (allowRegistrationChecked)
-      {
-        registration.find('.enabler').trigger('change');
-      }
-    })
-    .trigger('change');
+    const registration = $('#registration');
+    const allowRegistrationChecked = $(this).is(':checked');
+    registration.find('input, select').not($(this)).prop('disabled', !allowRegistrationChecked);
+    if (allowRegistrationChecked)
+    {
+      registration.find('.enabler').trigger('change');
+    }
+  }).trigger('change');
 
   <?php
   // Enable the checkboxes which may have been disabled, otherwise their values
   // will not be posted.
   ?>
   form.on('submit', function() {
-      $('#registration').find('input[type="checkbox"]').prop('disabled', false);
-    });
+    $('#registration').find('input[type="checkbox"]').prop('disabled', false);
+  });
 
 });

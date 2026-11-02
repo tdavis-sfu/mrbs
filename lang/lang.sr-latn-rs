@@ -61,21 +61,21 @@ $vocab["end"]                = "Kraj";
 $vocab["start_date"]         = "Vreme početka";
 $vocab["end_date"]           = "Vreme završetka";
 $vocab["time"]               = "Vreme";
-$vocab["period"]             = "Period";
+$vocab["period_title"]       = "Period";
 $vocab["duration"]           = "Trajanje";
-$vocab["second_lc"]          = "sekunda";
+$vocab["second"]             = "sekunda";
 $vocab["seconds"]            = "sekundi";
-$vocab["minute_lc"]          = "minuta";
+$vocab["minute"]             = "minuta";
 $vocab["minutes"]            = "minuta";
-$vocab["hour_lc"]            = "sat";
+$vocab["hour"]               = "sat";
 $vocab["hours"]              = "sati";
 $vocab["day"]                = "dan";
 $vocab["days"]               = "dana";
 $vocab["week"]               = "nedelja";
 $vocab["weeks"]              = "nedelja";
-$vocab["year_lc"]            = "godina";
+$vocab["year"]               = "godina";
 $vocab["years"]              = "godina";
-$vocab["period_lc"]          = "period";
+$vocab["period"]             = "period";
 $vocab["periods"]            = "periodi";
 $vocab["all_day"]            = "Ceo dan";
 $vocab["area"]               = "Oblast";
@@ -96,12 +96,12 @@ $vocab["rep_for_nweekly"]    = "(za n-nedeljno)";
 $vocab["skip_conflicts"]     = "Preskoči konflikte koji su prošli";
 $vocab["ctrl_click"]         = "Pritisnite Ctrl da biste označili više prostorija";
 $vocab["entryid"]            = "ID Unosa";
-$vocab["repeat_id"]          = "ID Ponavljanja"; 
+$vocab["repeat_id"]          = "ID Ponavljanja";
 $vocab["brief_description"]  = "Kratak opis.";
 $vocab["status"]             = "Status";
 $vocab["public"]             = "Javno";
 $vocab["private"]            = "Privatno";
-$vocab["unavailable"]        = "Privatno";
+$vocab["unavailable"]        = "[Privatno]";
 $vocab["is_mandatory_field"] = "je obavezno polje, unesite vrednost.";
 $vocab["missing_mandatory_field"] = "Niste uneli vrednost za obavezno polje";
 $vocab["confirmed"]          = "Potvrđeno";
@@ -180,7 +180,7 @@ $vocab["info_requested"]          = "Information requested";
 $vocab["min_time_before"]         = "The minimum interval between now and the start of a booking is";
 $vocab["max_time_before"]         = "The maximum interval between now and the end of a booking is";
 $vocab["latest_booking_date"]     = "The latest booking date is %s";
-$vocab["max_booking_duration"]    = "The maximum duration of a booking is";
+$vocab["max_booking_duration"]    = 'The maximum duration of a booking is %1$d %2$s';
 $vocab["max_per_day_global"]      = "The maximum number of bookings per day per user across the whole system is";
 $vocab["max_per_week_global"]     = "The maximum number of bookings per week per user across the whole system is";
 $vocab["max_per_month_global"]    = "The maximum number of bookings per month per user across the whole system is";
@@ -305,7 +305,7 @@ $vocab["delete_entries"]        = "Delete entries";
 $vocab["delete_entries_warning"] = "WARNING!  This will delete all the entries matching " .
                                    "the search string.  The operation cannot be undone.  Are " .
                                    "you sure you want to continue?\n\n" .
-                                   "Total number of entries that will be deleted: %%s"; // The % sign is escaped because the string substitution is done by JavaScript
+                                   "Total number of entries that will be deleted: %s";
 $vocab["delete_entries_failed"] = "The entries could not be deleted.";
 
 // Used in admin.php
@@ -471,7 +471,7 @@ $vocab["type.N"]            = "Neradni dani";
 $vocab["type.IV"]			= "Izborno veće";
 $vocab["type.NNV"]			= "NN veće";
 $vocab["type.SN"]			= "Studijska nedelja";
- 
+
 // General
 $vocab["fatal_db_error"]     = "Fatal error: unfortunately the database is not available at the moment.";
 $vocab["back"]               = "Back";

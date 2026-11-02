@@ -3,29 +3,17 @@ namespace MRBS\Auth;
 
 use MRBS\User;
 
-// A class for authenticating against a Wix system.  It requires code to be installed in
-// http-functions.js in the Wix backend.  See wix/README for full details.
-//
-// It would be nice to be able to use Wix's OAuth2 server, but it seems to be limited to Wix
-// apps.
-//
-// Another approach might be to use the Wix backend function getMember(), but this doesn't
-// work inside http_functions as the URL endpoint for http_functions is not associated with
-// a user session.
+/**
+ * A class for authenticating against a Wix system.  It requires code to be installed in
+ * http-functions.js in the Wix backend.  See wix/README for full details.
+ *
+ * It would be nice to be able to use Wix's OAuth2 server, but it seems to be limited to Wix apps.
+ *
+ * Another approach might be to use the Wix backend function getMember(), but this doesn't work inside
+ * http_functions as the URL endpoint for http_functions is not associated with a user session.
+ */
 class AuthWix extends Auth
 {
-
-  /* validateUser($user, $pass)
-   *
-   * Checks if the specified username/password pair are valid
-   *
-   * $user  - The username
-   * $pass  - The password
-   *
-   * Returns:
-   *   false    - The pair are invalid or do not exist
-   *   string   - The validated username
-   */
   public function validateUser(
     #[\SensitiveParameter]
     ?string $user,
@@ -54,21 +42,23 @@ class AuthWix extends Auth
   }
 
 
-  // Checks whether validation of a user by email address is possible and allowed.
+  /**
+   */
   public function canValidateByEmail() : bool
   {
     return true;
   }
 
 
-  // Checks whether validation of a user by username is possible and allowed.
+  /**
+   */
   public function canValidateByUsername() : bool
   {
     return false;
   }
 
 
-  protected function getUserFresh(string $username) : ?User
+  public function getUserFresh(string $username) : ?User
   {
     global $auth;
 
@@ -212,7 +202,15 @@ class AuthWix extends Auth
     }
 
     fclose($stream);
-    curl_close($ch);
+
+    // curl_close() doesn't do anything from PHP 8.0 onwards (because the curl
+    // handle is an object and not a resource) and is deprecated from PHP 8.5.
+    assert(version_compare(MRBS_MIN_PHP_VERSION, '8.0.0', '<'), "The code below is now redundant.");
+    if (version_compare(PHP_VERSION, '8.0.0') < 0)
+    {
+      curl_close($ch);
+    }
+
     return $result;
   }
 

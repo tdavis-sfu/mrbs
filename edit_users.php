@@ -1,6 +1,8 @@
 <?php
+declare(strict_types=1);
 namespace MRBS;
 
+use MRBS\Errors\Errors;
 use MRBS\Form\ElementFieldset;
 use MRBS\Form\ElementInputSubmit;
 use MRBS\Form\ElementP;
@@ -43,9 +45,9 @@ use MRBS\Form\Form;
 
 require "defaultincludes.inc";
 
-if ($auth['type'] != 'db')
+if (!auth()->canCreateUsers())
 {
-  // You shouldn't be here unless you're using 'db' authentication
+  // You shouldn't be here unless you can create users
   location_header('index.php');
 }
 
@@ -55,11 +57,13 @@ $id = get_form_var('id', 'int');
 $password0 = get_form_var('password0', 'string', null, INPUT_POST);
 $password1 = get_form_var('password1', 'string', null, INPUT_POST);
 $invalid_email = get_form_var('invalid_email', 'int');
+$email_not_unique = get_form_var('email_not_unique', 'int');
 $name_empty = get_form_var('name_empty', 'int');
 $name_not_unique = get_form_var('name_not_unique', 'int');
 $taken_name = get_form_var('taken_name', 'string');
-$pwd_not_match = get_form_var('pwd_not_match', 'string');
-$pwd_invalid = get_form_var('pwd_invalid', 'string');
+$pwd_not_match = get_form_var(auth()::PWD_NOT_MATCH, 'string');
+$pwd_not_unique = get_form_var(auth()::PWD_NOT_UNIQUE, 'int');
+$pwd_invalid = get_form_var(auth()::PWD_INVALID, 'string');
 $invalid_dates = get_form_var('invalid_dates', 'array');
 $datatable = get_form_var('datatable', 'int');  // Will only be set if we're using DataTables
 $back_button = get_form_var('back_button', 'string');
@@ -102,7 +106,7 @@ function can_view_user($target)
 
   return (!$auth['only_admin_can_see_other_users']  ||
           ($mrbs_user->level >= $min_user_viewing_level) ||
-          (strcasecmp_locale($mrbs_user->username, $target) === 0));
+          (compare_usernames($mrbs_user->username, $target) === 0));
 }
 
 
@@ -111,35 +115,7 @@ function can_edit_user($target)
 {
   $mrbs_user = session()->getCurrentUser();
 
-  return (is_user_admin() || (isset($mrbs_user) && strcasecmp_locale($mrbs_user->username, $target) === 0));
-}
-
-
-// Get the type that should be used with get_form_var() for
-// a field which is a member of the array returned by get_field_info()
-function get_form_var_type($field)
-{
-  // "Level" is an exception because we've forced the value to be a string
-  // so that it can be used in an associative array
-  if ($field['name'] == 'level')
-  {
-    return 'string';
-  }
-  switch($field['nature'])
-  {
-    case 'character':
-      $type = 'string';
-      break;
-    case 'integer':
-      // Smallints and tinyints are considered to be booleans
-      $type = (isset($field['length']) && ($field['length'] <= 2)) ? 'string' : 'int';
-      break;
-    // We can only really deal with the types above at the moment
-    default:
-      $type = 'string';
-      break;
-  }
-  return $type;
+  return (is_user_admin() || (isset($mrbs_user) && compare_usernames($mrbs_user->username, $target) === 0));
 }
 
 
@@ -171,15 +147,15 @@ function output_row($row)
   }
   else
   {
-    $display_name_value = "<span class=\"normal\">" . htmlspecialchars($row['display_name']) . "</span>";
+    $display_name_value = "<span class=\"normal\">" . escape_html($row['display_name']) . "</span>";
   }
 
   $sortname = get_sortable_name($row['display_name']);
   // TODO: move the data-order attribute up into the <td> and get rid of the <span>
-  $values[] = '<span data-order="' . htmlspecialchars($sortname) . '"></span>' . $display_name_value;
+  $values[] = '<span data-order="' . escape_html($sortname) . '"></span>' . $display_name_value;
 
   // Then the username
-  $values[] = '<span class="normal">' . htmlspecialchars($row['name']) . '</span>';
+  $values[] = '<span class="normal">' . escape_html($row['name']) . '</span>';
 
   // Other columns
   foreach ($fields as $field)
@@ -203,14 +179,14 @@ function output_row($row)
         case 'level':
           // the level field contains a code and we want to display a string
           // (but we put the code in a span for sorting)
-          $values[] = "<span title=\"$col_value\"></span>" .
+          $values[] = '<span title="' . escape_html($col_value) . '"></span>' .
                       "<div class=\"string\">" . get_vocab("level_$col_value") . "</div>";
           break;
         case 'email':
           // we don't want to truncate the email address
           if (isset($col_value) && ($col_value !== ''))
           {
-            $escaped_email = htmlspecialchars($col_value);
+            $escaped_email = escape_html($col_value);
             $values[] = "<div class=\"string\">\n" .
                         "<a href=\"mailto:$escaped_email\">$escaped_email</a>\n" .
                         "</div>\n";
@@ -221,20 +197,17 @@ function output_row($row)
           }
           break;
         case 'timestamp':
-          // Convert the SQL timestamp into a time value and back into a localised string and
-          // put the UNIX timestamp in a span so that the JavaScript can sort it properly.
-          $unix_timestamp = (isset($col_value)) ? strtotime($col_value) : 0;
-          if (($unix_timestamp === false) || ($unix_timestamp < 0))
-          {
-            // To cater for timestamps before the start of the Unix Epoch
-            $unix_timestamp = 0;
-          }
-          $values[] = "<span title=\"$unix_timestamp\"></span>" .
-                      (($unix_timestamp) ? time_date_string($unix_timestamp) : '');
-          break;
+          // Use the 'last_updated' value because it will have been converted
+          // from 'timestamp' using the correct timezone, ie the timezone of
+          // the database server.
+          $col_value = $row['last_updated'];
+          // Fall through
         case 'last_login':
-          $values[] = "<span title=\"$col_value\"></span>" .
-                      (($col_value) ? time_date_string($col_value) : '');
+          // Put the UNIX timestamp in a span so that the JavaScript can sort it properly.
+          // If there isn't a date then put '0' in the title, otherwise DataTables throws
+          // a TypeError if you try and sort the column.
+          $values[] = '<span title="' . (($col_value) ? escape_html($col_value) : '0') . '"></span>' .
+                      (($col_value) ? escape_html(time_date_string($col_value)) : '');
           break;
         default:
           // Where there's an associative array of options, display
@@ -242,7 +215,7 @@ function output_row($row)
           if (isset($select_options["users.$key"]) &&
               is_assoc($select_options["users.$key"]))
           {
-            if (isset($select_options["users.$key"][$row[$key]]))
+            if (isset($row[$key]) && isset($select_options["users.$key"][$row[$key]]))
             {
               $col_value = $select_options["users.$key"][$row[$key]];
             }
@@ -250,7 +223,7 @@ function output_row($row)
             {
               $col_value = '';
             }
-            $values[] = "<div class=\"string\">" . htmlspecialchars($col_value) . "</div>";
+            $values[] = "<div class=\"string\">" . escape_html($col_value) . "</div>";
           }
           elseif (($field['nature'] == 'boolean') ||
               (($field['nature'] == 'integer') && isset($field['length']) && ($field['length'] <= 2)) )
@@ -270,8 +243,8 @@ function output_row($row)
             {
               $col_value = '';
             }
-            $values[] = "<div class=\"string\" title=\"" . htmlspecialchars($col_value) . "\">" .
-                        htmlspecialchars($col_value) . "</div>";
+            $values[] = "<div class=\"string\" title=\"" . escape_html($col_value) . "\">" .
+                        escape_html($col_value) . "</div>";
           }
           break;
       }  // end switch
@@ -438,6 +411,7 @@ function get_field_custom($custom_field, $params, $disabled=false)
   if ($custom_field['nature'] == 'decimal')
   {
     list( , $decimal_places) = explode(',', $custom_field['length']);
+    $decimal_places = intval($decimal_places);
     $step = pow(10, -$decimal_places);
     $step = number_format($step, $decimal_places);
     $field->setControlAttribute('step', $step);
@@ -780,9 +754,13 @@ if (isset($action) && ( ($action == "edit") or ($action == "add") ))
   {
     echo "<p class=\"error\">" . get_vocab('invalid_email') . "</p>\n";
   }
+  if (!empty($email_not_unique))
+  {
+    echo "<p class=\"error\">" . get_vocab('email_not_unique') . "</p>\n";
+  }
   if (!empty($name_not_unique))
   {
-    echo "<p class=\"error\">'" . htmlspecialchars($taken_name) . "' " . get_vocab('name_not_unique') . "<p>\n";
+    echo "<p class=\"error\">'" . escape_html($taken_name) . "' " . get_vocab('name_not_unique') . "<p>\n";
   }
   if (!empty($name_empty))
   {
@@ -800,6 +778,10 @@ if (isset($action) && ( ($action == "edit") or ($action == "add") ))
   if (!empty($pwd_not_match))
   {
     echo "<p class=\"error\">" . get_vocab("passwords_not_eq") . "</p>\n";
+  }
+  if (!empty($pwd_not_unique))
+  {
+    echo "<p class=\"error\">" . get_vocab("password_not_unique") . "</p>\n";
   }
   if (!empty($pwd_invalid))
   {
@@ -931,7 +913,7 @@ if (isset($action) && ($action == "update"))
               FROM " . _tbl('users') . "
              WHERE name=?
              LIMIT 1";
-    $my_id = db()->query1($sql, array(utf8_strtolower($mrbs_user->username)));
+    $my_id = db()->query1($sql, array(mb_strtolower($mrbs_user->username)));
   }
   else
   {
@@ -983,14 +965,14 @@ if (isset($action) && ($action == "update"))
         $values[$fieldname] = (empty($values[$fieldname])) ? 0 : 1;
       }
 
-      if (isset($values[$fieldname]))
+      if (is_string($values[$fieldname]))
       {
         // Trim the field to remove accidental whitespace
         $values[$fieldname] = trim($values[$fieldname]);
         // Truncate the field to the maximum length as a precaution.
         if (null !== ($maxlength = maxlength("users.$fieldname")))
         {
-          $values[$fieldname] = utf8_substr($values[$fieldname], 0, $maxlength);
+          $values[$fieldname] = mb_substr($values[$fieldname], 0, $maxlength);
         }
       }
     }
@@ -998,7 +980,7 @@ if (isset($action) && ($action == "update"))
     // Remove any extra whitespace that may have accidentally been inserted in the display name
     if ($fieldname == 'display_name')
     {
-      $values[$fieldname] = preg_replace('/\s+/', ' ', $values[$fieldname]);
+      $values[$fieldname] = remove_extra_whitespace($values[$fieldname]);
     }
 
     // we will also put the data into a query string which we will use for passing
@@ -1013,17 +995,16 @@ if (isset($action) && ($action == "update"))
       case 'name':
         // name: convert it to lower case
         $q_string .= "&$fieldname=" . $values[$fieldname];
-        $values[$fieldname] = utf8_strtolower($values[$fieldname]);
+        $values[$fieldname] = mb_strtolower($values[$fieldname]);
         break;
       case 'password_hash':
-        // password: if the password field is blank it means
-        // that the user doesn't want to change the password
-        // so don't do anything; otherwise calculate the hash.
-        // Note: we don't put the password in the query string
-        // for security reasons.
-        if ($password0 !== '')
+        // Password: if it's an existing user and the password field is blank, it means
+        // that the user doesn't want to change the password so don't do anything; otherwise
+        // calculate the hash.
+        // Note: we don't put the password in the query string for security reasons.
+        if (!isset($id) || (isset($password0) && ($password0 !== '')))
         {
-          $values[$fieldname] = password_hash($password0, PASSWORD_DEFAULT);
+          $values[$fieldname] = password_hash($password0 ?? '', PASSWORD_DEFAULT);
         }
         break;
       case 'level':
@@ -1092,30 +1073,28 @@ if (isset($action) && ($action == "update"))
         }
         break;
       case 'password_hash':
-        // check that the two passwords match
-        if ($password0 != $password1)
+        // Note: there will only be a password_hash field if it's a new user, or the password0 field is not empty.
+        if (true !== ($error = auth()->validatePasswords([$password0, $password1], $values['name'], $values['email'])))
         {
           $valid_data = false;
-          $q_string .= "&pwd_not_match=1";
-        }
-        // check that the password conforms to the password policy
-        // if it's a new user, or else if it's an existing user
-        // trying to change their password
-        if (!isset($id) || (isset($password0) && ($password0 !== '')))
-        {
-          if (!auth()->validatePassword($password0))
-          {
-            $valid_data = false;
-            $q_string .= "&pwd_invalid=1";
-          }
+          $q_string .= "&$error=1";
         }
         break;
       case 'email':
-        // check that the email address is valid
-        if (isset($value) && ($value !== '') && !validate_email_list($value))
+        if (isset($value) && ($value !== ''))
         {
-          $valid_data = false;
-          $q_string .= "&invalid_email=1";
+          // Check that the email address is valid
+          if (!validate_email_list($value))
+          {
+            $valid_data = false;
+            $q_string .= "&invalid_email=1";
+          }
+          // .. and, if required, unique
+          if (!empty($auth['db']['unique_email']) && !auth()->isUniqueEmail($value, $id ?? null))
+          {
+            $valid_data = false;
+            $q_string .= "&email_not_unique=1";
+          }
         }
         break;
     }
@@ -1245,7 +1224,7 @@ if (isset($action) && ($action == "update"))
   }
 
   /* DEBUG lines - check the actual sql statement going into the db */
-  //echo "Final SQL string: <code>" . htmlspecialchars($operation) . "</code>";
+  //echo "Final SQL string: <code>" . escape_html($operation) . "</code>";
   //exit;
   db()->command($operation, $sql_params);
 
@@ -1263,7 +1242,7 @@ if (isset($action) && ($action == "delete"))
 
   if (!isset($user))
   {
-    fatal_error("Fatal error while deleting a user");
+    Errors::fatalError("Fatal error while deleting a user");
   }
 
   // You can't delete a user if you're not some kind of admin, and then you can't
@@ -1390,7 +1369,7 @@ if ($initial_user_creation != 1)   // don't print the user table if there are no
             }
             break;
         }
-        echo '<th id="col_' . htmlspecialchars($fieldname) . "\">$heading</th>";
+        echo '<th id="col_' . escape_html($fieldname) . "\">$heading</th>";
       }
     }
 

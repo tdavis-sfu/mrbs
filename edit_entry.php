@@ -2,6 +2,7 @@
 declare(strict_types=1);
 namespace MRBS;
 
+use MRBS\Errors\Errors;
 use MRBS\Form\ElementDiv;
 use MRBS\Form\ElementFieldset;
 use MRBS\Form\ElementInputCheckbox;
@@ -12,6 +13,7 @@ use MRBS\Form\ElementInputSubmit;
 use MRBS\Form\ElementLabel;
 use MRBS\Form\ElementSelect;
 use MRBS\Form\ElementSpan;
+use MRBS\Form\Field;
 use MRBS\Form\FieldDiv;
 use MRBS\Form\FieldInputCheckbox;
 use MRBS\Form\FieldInputCheckboxGroup;
@@ -106,7 +108,7 @@ foreach ($fields as $field)
 }
 
 
-function get_field_create_by(string $create_by, bool $disabled=false)
+function get_field_create_by(string $create_by, bool $disabled=false) : Field
 {
   $params = array('label'    => get_vocab('createdby'),
                   'name'     => 'create_by',
@@ -119,7 +121,7 @@ function get_field_create_by(string $create_by, bool $disabled=false)
 }
 
 
-function get_field_name(string $value, $disabled=false)
+function get_field_name(string $value, bool $disabled=false) : Field
 {
   $params = array('label'    => get_vocab('namebooker'),
                   'name'     => 'name',
@@ -132,15 +134,13 @@ function get_field_name(string $value, $disabled=false)
 }
 
 
-function get_field_description(string $value, $disabled=false)
+function get_field_description(string $value, int $area_id, bool $disabled=false) : Field
 {
-  global $is_mandatory_field;
-
   $params = array('label'    => get_vocab('fulldescription'),
                   'name'     => 'description',
                   'field'    => 'entry.description',
                   'value'    => $value,
-                  'required' => !empty($is_mandatory_field['entry.description']),
+                  'required' => is_mandatory_field('entry.description', $area_id),
                   'disabled' => $disabled);
 
   return get_field_entry_input($params);
@@ -169,11 +169,6 @@ function get_slot_selector(array $area, string $id, string $name, int $current_s
     throw new \Exception("Internal error - resolution is NULL or <= 0");
   }
 
-  if ($area['enable_periods'])
-  {
-    $base = 12*SECONDS_PER_HOUR;  // The start of the first period of the day
-  }
-
   // Build the options
   $options = array();
 
@@ -192,14 +187,7 @@ function get_slot_selector(array $area, string $id, string $name, int $current_s
 
   for ($s = $first; $s <= $last; $s += $area['resolution'])
   {
-    if ($area['enable_periods'])
-    {
-      $options[$s] = $area['periods'][intval(($s-$base)/60)];
-    }
-    else
-    {
-      $options[$s] = hour_min($s);
-    }
+    $options[$s] = ($area['enable_periods']) ? $area['periods']->offsetGetByNominalSeconds($s)->name : hour_min($s);
   }
 
   // Make sure that the selected option is within the range of available options.
@@ -502,10 +490,8 @@ function get_field_rooms($value, bool $disabled=false) : FieldSelect
 }
 
 
-function get_field_type(string $value, bool $disabled=false) : ?FieldSelect
+function get_field_type(string $value, int $area_id, bool $disabled=false) : ?FieldSelect
 {
-  global $is_mandatory_field;
-
   // Get the options
   $options = get_type_options(is_book_admin());
 
@@ -516,8 +502,9 @@ function get_field_type(string $value, bool $disabled=false) : ?FieldSelect
     return null;
   }
 
-  // If it's a mandatory field add a blank option to force a selection
-  if (!empty($is_mandatory_field['entry.type']))
+  $required = is_mandatory_field('entry.type', $area_id);
+  // If it's a mandatory field, add a blank option to force a selection
+  if ($required)
   {
     $options = array('' => get_type_vocab('')) + $options;
   }
@@ -527,7 +514,7 @@ function get_field_type(string $value, bool $disabled=false) : ?FieldSelect
   $field->setLabel(get_vocab('type'))
         ->setControlAttributes(array('name'     => 'type',
                                      'disabled' => $disabled,
-                                     'required' => !empty($is_mandatory_field['entry.type'])))
+                                     'required' => $required))
         ->addSelectOptions($options, $value, true);
 
   return $field;
@@ -583,10 +570,9 @@ function get_field_privacy_status(bool $value, bool $disabled=false) : ?FieldInp
 }
 
 
-function get_field_custom(string $key, bool $disabled=false)
+function get_field_custom(string $key, int $area_id, bool $disabled=false)
 {
   global $custom_fields, $custom_fields_map;
-  global $is_mandatory_field;
 
   // TODO: have a common way of generating custom fields for all tables
 
@@ -598,6 +584,7 @@ function get_field_custom(string $key, bool $disabled=false)
   }
 
   $custom_field = $custom_fields_map[$key];
+  $required = is_mandatory_field('entry.' . $key, $area_id);
 
   // Output a checkbox if it's a boolean or integer <= 2 bytes (which we will
   // assume are intended to be booleans)
@@ -624,7 +611,7 @@ function get_field_custom(string $key, bool $disabled=false)
                     'name'     => VAR_PREFIX . $key,
                     'field'    => "entry.$key",
                     'value'    => (isset($custom_fields[$key])) ? $custom_fields[$key] : NULL,
-                    'required' => !empty($is_mandatory_field["entry.$key"]),
+                    'required' => $required,
                     'disabled' => $disabled);
     return get_field_entry_input($params);
   }
@@ -635,11 +622,12 @@ function get_field_custom(string $key, bool $disabled=false)
   $field->setLabel(get_loc_field_name(_tbl('entry'), $key))
         ->setControlAttributes(array('name'     => VAR_PREFIX . $key,
                                      'disabled' => $disabled,
-                                     'required' => !empty($is_mandatory_field["entry.$key"])));
+                                     'required' => $required));
 
   if ($custom_field['nature'] == 'decimal')
   {
     list( , $decimal_places) = explode(',', $custom_field['length']);
+    $decimal_places = (int) $decimal_places;
     $step = pow(10, -$decimal_places);
     $step = number_format($step, $decimal_places);
     $field->setControlAttribute('step', $step);
@@ -850,7 +838,8 @@ function get_fieldset_rep_monthly_details(RepeatRule $repeat_rule, bool $disable
 }
 
 
-function get_field_rep_end_date(RepeatRule $repeat_rule, bool $disabled=false) : FieldInputDate
+// $min is the minimum date for the repeat end date
+function get_field_rep_end_date(RepeatRule $repeat_rule, bool $disabled=false, ?DateTime $min=null) : FieldInputDate
 {
   $field = new FieldInputDate();
 
@@ -858,6 +847,13 @@ function get_field_rep_end_date(RepeatRule $repeat_rule, bool $disabled=false) :
         ->setControlAttributes(array('name'     => 'rep_end_date',
                                      'value'    => $repeat_rule->getEndDate()->getISODate(),
                                      'disabled' => $disabled));
+
+  if (isset($min))
+  {
+    // Make it a data-min, rather than a min, attribute because we need to be able to change it using
+    // JavaScript. If we use min and JavaScript is not running, we are stuck with it.
+    $field->setControlAttribute('data-min', $min->getISODate());
+  }
 
   return $field;
 }
@@ -991,7 +987,8 @@ function get_fieldset_registration() : ?ElementFieldset
 }
 
 
-function get_fieldset_repeat(RepeatRule $repeat_rule) : ElementFieldset
+// $min is the minimum date for the repeat end date
+function get_fieldset_repeat(RepeatRule $repeat_rule, ?DateTime $min=null) : ElementFieldset
 {
   global $repeats_allowed;
 
@@ -1009,7 +1006,7 @@ function get_fieldset_repeat(RepeatRule $repeat_rule) : ElementFieldset
 
   $fieldset->addElement(get_field_rep_type($repeat_rule, $disabled))
            ->addElement(get_field_rep_interval($repeat_rule, $disabled))
-           ->addElement(get_field_rep_end_date($repeat_rule, $disabled))
+           ->addElement(get_field_rep_end_date($repeat_rule, $disabled, $min))
            ->addElement(get_field_skip_conflicts($disabled));
 
   return $fieldset;
@@ -1114,12 +1111,12 @@ $period = get_form_var('period', 'int');
 $id = get_form_var('id', 'int');
 $copy = get_form_var('copy', 'bool');
 $edit_series = get_form_var('edit_series', 'bool');
-$returl = get_form_var('returl', 'string');
+$returl = get_form_var('returl', 'url_local');
 // The following variables are used when coming via a JavaScript drag select
 $drag = get_form_var('drag', 'int');
 $start_seconds = get_form_var('start_seconds', 'int');
 $end_seconds = get_form_var('end_seconds', 'int');
-$selected_rooms = get_form_var('rooms', 'array');
+$selected_rooms = get_form_var('rooms', '[int]');
 $start_date = get_form_var('start_date', 'string');
 $end_date = get_form_var('end_date', 'string');
 // And this comes from edit_entry_handler.php
@@ -1183,7 +1180,7 @@ if (isset($start_date))
     // The end date that came through from the drag select is actually the repeat end
     // date, and the real end date will actually be the start date.
     $rep_type = RepeatRule::DAILY;
-    $rep_end_date = DateTime::createFromFormat('Y-m-d', $end_date);
+    $rep_end_date = DateTime::createFromFormat(DateTime::ISO8601_DATE, $end_date);
     $end_date = $start_date;
   }
 }
@@ -1213,7 +1210,7 @@ if (isset($id))
 
   if (is_null($entry))
   {
-    fatal_error(get_vocab("entryid") . $id . get_vocab("not_found"));
+    Errors::fatalError(get_vocab("entryid") . $id . get_vocab("not_found"));
   }
 
   // We've possibly got a new room and area, so we need to update the settings
@@ -1317,6 +1314,7 @@ if (isset($id))
     }
   }
 
+  $area_id = get_area($room_id);
 
   if(($entry_type == ENTRY_RPT_ORIGINAL) || ($entry_type == ENTRY_RPT_CHANGED))
   {
@@ -1324,7 +1322,7 @@ if (isset($id))
 
     if (!isset($repeat))
     {
-      fatal_error(get_vocab("repeat_id") . $rep_id . get_vocab("not_found"));
+      Errors::fatalError(get_vocab("repeat_id") . $rep_id . get_vocab("not_found"));
     }
 
     $rep_type = $repeat['rep_type'];
@@ -1396,8 +1394,9 @@ else
   }
   $create_by     = $mrbs_username;
   $description   = $default_description;
-  $type          = (empty($is_mandatory_field['entry.type'])) ? $default_type : '';
   $room_id       = $room;
+  $area_id = get_area($room_id);
+  $type          = (is_mandatory_field('entry.type', $area_id)) ? '' : $default_type;
   $private       = $private_default;
   $tentative     = !$confirmed_default;
   $allow_registration           = (bool) $allow_registration_default;
@@ -1458,11 +1457,11 @@ else
     // Set the duration
     if ($enable_periods)
     {
-      $duration = 60;  // one period
+      $duration = ($default_duration_periods ?? 1) * SECONDS_PER_MINUTE;  // One minute is one period
     }
     else
     {
-      $duration = (isset($default_duration)) ? $default_duration : SECONDS_PER_HOUR;
+      $duration = $default_duration ?? SECONDS_PER_HOUR;
     }
 
     // Make sure the duration doesn't exceed the maximum
@@ -1505,6 +1504,16 @@ else
   $rep_days = array(date('w', $start_time));
   $rep_interval = 1;
   $month_type = RepeatRule::MONTHLY_ABSOLUTE;
+
+  // Populate the default values for the custom fields
+  $columns = Columns::getInstance(_tbl('entry'));
+  foreach ($columns as $column)
+  {
+    if (!in_array($column->name, $standard_fields['entry']) && (null !== ($default = $column->getDefault())))
+    {
+      $custom_fields[$column->name] = $default;
+    }
+  }
 }
 
 $repeat_rule = new RepeatRule();
@@ -1521,9 +1530,6 @@ if (isset($rep_end_date))
 
 $start_hour  = date('H', $start_time);
 $start_min   = date('i', $start_time);
-
-// Determine the area id of the room in question first
-$area_id = mrbsGetRoomArea($room_id);
 
 $enable_periods ? toPeriodString($start_min, $duration, $dur_units) : toTimeString($duration, $dur_units);
 
@@ -1608,7 +1614,7 @@ while (false !== ($row = $res->next_row_keyed()))
   }
 
   // Periods are JSON encoded in the database
-  $row['periods'] = json_decode($row['periods']);
+  $row['periods'] = Periods::fromDbValue($row['id'], $row['periods']);
 
   // Make sure we've got the correct resolution when using periods (it's
   // probably OK anyway, but just in case)
@@ -1654,8 +1660,8 @@ while (false !== ($row = $res->next_row_keyed()))
 }
 
 // Check that the area for this room actually exists.  This will happen if the room id in the query
-// string is invalid, usually as a result of using an out of date bookmark.
-if (!isset($areas[$area_id]))
+// string is invalid, usually as a result of using an out-of-date bookmark.
+if (empty($area_id) || !isset($areas[$area_id]))
 {
   echo "<h1>" . get_vocab('error') . "</h1>\n";
   echo "<p>" . get_vocab('edit_entry_nonexistent_room') . "</p>\n";
@@ -1754,7 +1760,7 @@ foreach ($edit_entry_field_order as $key)
       break;
 
     case 'description':
-      $fieldset->addElement(get_field_description($description));
+      $fieldset->addElement(get_field_description($description, $area_id));
       break;
 
     case 'start_time':
@@ -1771,7 +1777,7 @@ foreach ($edit_entry_field_order as $key)
       break;
 
     case 'type':
-      $fieldset->addElement(get_field_type($type));
+      $fieldset->addElement(get_field_type($type, $area_id));
       break;
 
     case 'confirmation_status':
@@ -1783,7 +1789,7 @@ foreach ($edit_entry_field_order as $key)
       break;
 
     default:
-      $fieldset->addElement(get_field_custom($key));
+      $fieldset->addElement(get_field_custom($key, $area_id));
       break;
 
   } // switch
@@ -1797,7 +1803,7 @@ $form->addElement(get_fieldset_registration());
 // a new booking and repeats are allowed.
 if ((isset($id) && $edit_series) || (!isset($id) && $repeats_allowed))
 {
-  $form->addElement(get_fieldset_repeat($repeat_rule));
+  $form->addElement(get_fieldset_repeat($repeat_rule, (new DateTime())->setTimestamp($start_time)));
 }
 
 // Checkbox for no email

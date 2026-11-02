@@ -2,6 +2,7 @@
 declare(strict_types=1);
 namespace MRBS;
 
+use MRBS\Errors\Errors;
 use MRBS\Form\ElementFieldset;
 use MRBS\Form\ElementInputSubmit;
 use MRBS\Form\ElementP;
@@ -294,7 +295,7 @@ print_header($context);
 // Get the details for this room
 if (empty($room) || is_null($data = get_room_details($room)))
 {
-  fatal_error(get_vocab('invalid_room'));
+  Errors::fatalError(get_vocab('invalid_room'));
 }
 
 $errors = get_form_var('errors', 'array');
@@ -331,7 +332,7 @@ if ($auth['allow_custom_html'])
 {
   // Now the custom HTML
   echo "<div id=\"div_custom_html\">\n";
-  // no htmlspecialchars() because we want the HTML!
+  // no escape_html() because we want the HTML!
   echo (isset($data['custom_html'])) ? $data['custom_html'] . "\n" : "";
   echo "</div>\n";
 }

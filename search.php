@@ -2,12 +2,14 @@
 declare(strict_types=1);
 namespace MRBS;
 
+use DateTimeZone;
 use MRBS\Form\ElementFieldset;
 use MRBS\Form\ElementInputSubmit;
 use MRBS\Form\FieldInputDate;
 use MRBS\Form\FieldInputSearch;
 use MRBS\Form\FieldInputSubmit;
 use MRBS\Form\Form;
+use MRBS\ICalendar\Calendar;
 
 require "defaultincludes.inc";
 
@@ -64,7 +66,7 @@ function generate_search_nav_html(int $search_pos, int $total, int $num_records,
 
 function output_row($row, $returl)
 {
-  global $is_ajax, $json_data, $view;
+  global $is_ajax, $json_data, $view, $timezone;
 
   $vars = array('id'     => $row['id'],
                 'returl' => $returl);
@@ -73,38 +75,33 @@ function output_row($row, $returl)
 
   $values = array();
   // booking name
-  $html_name = htmlspecialchars($row['name']);
+  $html_name = escape_html($row['name']);
   $values[] = '<a title="' . $html_name . '"' .
-                ' href="' . htmlspecialchars(multisite("view_entry.php?$query")) . '">' . $html_name . '</a>';
+                ' href="' . escape_html(multisite("view_entry.php?$query")) . '">' . $html_name . '</a>';
   // created by
-  $values[] = htmlspecialchars(get_compound_name($row['create_by']));
+  $values[] = escape_html(get_compound_name($row['create_by']));
   // start time and link to day view
-  $date = getdate($row['start_time']);
+  $start_date = new DateTime('now', new DateTimeZone($row['timezone'] ?? $timezone));
+  $start_date->setTimestamp($row['start_time']);
 
-  $vars = array('view'  => $view,
-                'year'  => $date['year'],
-                'month' => $date['mon'],
-                'day'   => $date['mday'],
-                'area'  => $row['area_id'],
-                'room'  => $row['room_id']);
+  $vars = [
+    'view'  => $view,
+    'year'  => $start_date->getYear(),
+    'month' => $start_date->getMonth(),
+    'day'   => $start_date->getDay(),
+    'area'  => $row['area_id'],
+    'room'  => $row['room_id']
+  ];
 
   $query = http_build_query($vars, '', '&');
 
-  $link = '<a href="' . htmlspecialchars(multisite("index.php?$query")) . '">';
-
-  if(empty($row['enable_periods']))
-  {
-    $link_str = time_date_string($row['start_time']);
-  }
-  else
-  {
-    list(,$link_str) = period_date_string($row['start_time'], $row['area_id']);
-  }
-  $link .= htmlspecialchars($link_str) ."</a>";
+  $link = '<a href="' . escape_html(multisite("index.php?$query")) . '">';
+  $link_str = date_string(!empty($row['enable_periods']), $row['start_time'], $row['area_id']);
+  $link .= escape_html($link_str) ."</a>";
   //    add a span with the numeric start time in the title for sorting
   $values[] = "<span title=\"" . $row['start_time'] . "\"></span>" . $link;
   // description
-  $values[] = htmlspecialchars($row['description'] ?? '');
+  $values[] = escape_html($row['description'] ?? '');
 
   if ($is_ajax)
   {
@@ -158,7 +155,7 @@ if (isset($from_date))
 {
   if (validate_iso_date($from_date))
   {
-    $search_start_time = DateTime::createFromFormat('Y-m-d', $from_date)->setTime(0, 0)->getTimestamp();
+    $search_start_time = DateTime::createFromFormat(DateTime::ISO8601_DATE, $from_date)->setTime(0, 0)->getTimestamp();
   }
   else
   {
@@ -227,13 +224,13 @@ if (!($is_ajax || $ics)) {
   {
     echo get_vocab(
       'search_results',
-      htmlspecialchars($search_str),
-      htmlspecialchars(datetime_format($datetime_formats['date_search'], $search_start_time))
+      escape_html($search_str),
+      escape_html(datetime_format($datetime_formats['date_search'], $search_start_time))
     );
   }
   else
   {
-    echo get_vocab('search_results_unlimited', htmlspecialchars($search_str));
+    echo get_vocab('search_results_unlimited', escape_html($search_str));
   }
   echo "</h3>\n";
 }  // if (!$is_ajax)
@@ -263,7 +260,7 @@ foreach ($fields as $field)
       {
         // We have to use strpos() rather than stripos() because we cannot
         // assume PHP5
-        if (($key !== '') && (utf8_strpos(utf8_strtolower($value), utf8_strtolower($search_str)) !== false))
+        if (($key !== '') && (mb_strpos(mb_strtolower($value), mb_strtolower($search_str)) !== false))
         {
           $sql_pred .= " OR (E." . db()->quote($field['name']) . "=?)";
           $sql_params[] = $key;
@@ -360,7 +357,7 @@ if (!$ajax_capable || $is_ajax || $ics)
   // Now we set up the "real" query
   $sql = "SELECT E.*, " .
                 db()->syntax_timestamp_to_unix("E.timestamp") . " AS last_updated, " .
-                "A.area_name, R.room_name, R.area_id, A.enable_periods
+                "A.area_name, R.room_name, R.area_id, A.enable_periods, A.timezone
             FROM " . _tbl('entry') . " E
        LEFT JOIN " . _tbl('room') . " R
               ON E.room_id = R.id
@@ -380,7 +377,7 @@ if (!$ajax_capable || $is_ajax || $ics)
   $num_records = $result->count();
 }
 
-if (!($ajax_capable || $ics))
+if (!($ajax_capable || $is_ajax || $ics))
 {
   echo generate_search_nav_html($search_pos, $total, $num_records, $search_str);
 }
@@ -391,10 +388,10 @@ if (!($is_ajax || $ics))
   echo "<table id=\"search_results\" class=\"admin_table display\"";
 
   // Put the search parameters as data attributes so that the JavaScript can use them
-  echo ' data-search_str="' . htmlspecialchars($search_str) . '"';
+  echo ' data-search_str="' . escape_html($search_str) . '"';
   if (isset($from_date))
   {
-    echo ' data-from_date="' . htmlspecialchars($from_date) . '"';
+    echo ' data-from_date="' . escape_html($from_date) . '"';
   }
 
   echo ">\n";
@@ -413,14 +410,15 @@ if (!($is_ajax || $ics))
 if ($ics)
 {
   $filename = "$search_filename.ics";
-  $content_type = "application/ics; charset=" . get_charset() . "; name=\"$filename\"";
+  $content_type = "application/ics; charset=" . Language::MRBS_CHARSET . "; name=\"$filename\"";
   http_headers(array(
     "Content-Type: $content_type",
     "Content-Disposition: attachment; filename=\"$filename\"")
   );
   // We set $keep_private to FALSE here because we excluded all private
   // events in the SQL query
-  export_icalendar($result, false);
+  $calendar = Calendar::createFromStatement($result, false);
+  echo $calendar->toString();
   exit;
 }
 
@@ -434,6 +432,7 @@ if (!$ajax_capable || $is_ajax)
   while (false !== ($row = $result->next_row_keyed()))
   {
     row_cast_columns($row, 'entry');
+    $row['area_id'] = (int) $row['area_id'];
     output_row($row, $returl);
   }
 }

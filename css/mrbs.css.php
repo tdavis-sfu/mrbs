@@ -234,13 +234,13 @@ a:hover {
 
 span.not_allowed {
   cursor: not-allowed;
-  display: block;
+  display: table; /* Needs to be table rather than block to work on Firefox */
   width: 100%;
   height: 100%;
 }
 
 tr:nth-child(odd) td.new,
-.all_rooms tr:nth-child(odd) td {
+.all_rooms tr:nth-child(odd) td:not(.invalid) {
   background-color: <?php echo $row_odd_color ?>;
 }
 
@@ -260,7 +260,7 @@ tr:nth-child(odd) td.new.holiday,
 }
 
 tr:nth-child(even) td.new,
-.all_rooms tr:nth-child(even) td {
+.all_rooms tr:nth-child(even) td:not(.invalid) {
   background-color: <?php echo $row_even_color ?>;
 }
 
@@ -602,7 +602,8 @@ nav.main_calendar > nav:last-child {
 
 nav.view div.container {
   display: inline-grid;
-  grid-template-columns: 1fr 1fr 1fr;
+  grid-auto-columns: 1fr;
+  grid-auto-flow: column;
 }
 
 nav.view a, nav.arrow a {
@@ -623,6 +624,20 @@ nav.view a:last-child, nav.arrow a:last-child {
   border-right: 0;
   border-top-right-radius: 5px;
   border-bottom-right-radius: 5px;
+}
+
+<?php // Don't display the year button on narrow screens ?>
+@media (max-width: 30rem) {
+
+  nav.view a.year {
+    display: none;
+  }
+
+  nav.view a.month {
+    border-right: 0;
+    border-top-right-radius: 5px;
+    border-bottom-right-radius: 5px;
+  }
 }
 
 nav.view a {
@@ -667,7 +682,7 @@ nav a.next.week::before {
 
 <?php // Don't display the << and >> buttons on narrow screens ?>
 @media (max-width: 30rem) {
-  nav a.week {
+  nav.arrow a.week {
     display: none;
   }
 }
@@ -1600,6 +1615,12 @@ div#div_custom_html {
   opacity: 0.7;
 }
 
+.period_separator::after {
+  content: "-";
+  margin-left: -0.5em;
+  margin-right: 0.5em;
+}
+
 .delete_period::after {
   content: '\002718';  <?php // cross ?>
   color: red;
@@ -2021,6 +2042,7 @@ form#add_new_user {
   align-items: stretch;
   justify-content: flex-end;
   padding: 0.3em 0;
+  min-width: 0;
 }
 
 .banner nav.container > nav > nav {
@@ -2092,6 +2114,7 @@ nav.logon input:hover {
 #form_nav {
   padding-right: 1rem;
   margin-right: 1rem;
+  min-width: 0;
 }
 
 input.link[type="submit"] {
@@ -2145,6 +2168,12 @@ form#show_my_entries input.link[type="submit"] {
 ?>
 
 .color_key {
+  column-gap: 5px;
+  row-gap: 5px;
+  margin-top: 1em;
+}
+
+.color_key {
   display: -ms-flexbox;
   display: flex;
   -ms-flex-wrap: wrap;
@@ -2155,17 +2184,17 @@ form#show_my_entries input.link[type="submit"] {
   display: inline-grid;
   grid-template-columns: repeat(auto-fill, minmax(20ch, 1fr));
   width: 100%;
-  margin-top: 1em;
 }
 
 .color_key > div {
   width: 12em;
   color: <?php echo $color_key_font_color ?>;
+  text-align: center;
   word-wrap: break-word;
   padding: 0.3em;
   margin: -1px 0 0 -1px; <?php // to collapse the borders ?>
   font-weight: bold;
-  border: <?php echo $main_table_cell_border_width ?>px solid <?php echo $main_table_body_h_border_color ?>
+  border-radius: 5px;
 }
 
 @supports (display: grid) {
@@ -2440,7 +2469,7 @@ button#delete_button {
 
 h3.search_results {
   clear: left;
-  margin-bottom: 0;
+  margin-bottom: 1em;
   padding-top: 2em;
 }
 
@@ -2501,6 +2530,13 @@ div#site_faq_body {
 
 #site_faq_body :target {
   background-color: <?php echo $help_highlight_color ?>;
+}
+
+
+/* ------------- UPGRADE.INC -------------*/
+
+.upgrade_nav {
+  margin-top: 3em;
 }
 
 

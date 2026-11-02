@@ -1,17 +1,16 @@
 <?php
-declare(strict_types = 1);
+declare(strict_types=1);
 namespace MRBS\Auth;
 
-use MRBS\DBFactory;
+use MRBS\DB\DB;
+use MRBS\DB\DBExternalException;
+use MRBS\DB\DBFactory;
 use MRBS\User;
 use ValueError;
 
-class AuthDbExt extends Auth
+class AuthDbExt extends AuthDbAbstract
 {
-  protected $db_table;
   protected $password_format;
-  protected $column_name_username;
-  protected $column_name_display_name;
   protected $column_name_password;
   protected $column_name_email;
   protected $column_name_level;
@@ -44,17 +43,6 @@ class AuthDbExt extends Auth
   }
 
 
-  /* validateUser($user, $pass)
-   *
-   * Checks if the specified username/password pair are valid
-   *
-   * $user  - The user name
-   * $pass  - The password
-   *
-   * Returns:
-   *   false    - The pair are invalid or do not exist
-   *   string   - The validated username
-   */
   public function validateUser(
     #[\SensitiveParameter]
     ?string $user,
@@ -107,7 +95,7 @@ class AuthDbExt extends Auth
   }
 
 
-  protected function getUserFresh(string $username) : ?User
+  public function getUserFresh(string $username) : ?User
   {
     $sql_params = array();
 
@@ -197,37 +185,7 @@ class AuthDbExt extends Auth
   }
 
 
-  // Return an array of users, indexed by 'username' and 'display_name'
-  public function getUsernames() : array
-  {
-    if (isset($this->column_name_display_name) && ($this->column_name_display_name !== ''))
-    {
-      $display_name_column = $this->column_name_display_name;
-    }
-    else
-    {
-      $display_name_column = $this->column_name_username;
-    }
-
-    $sql = "SELECT " . $this->connection()->quote($this->column_name_username) . " AS username, ".
-                       $this->connection()->quote($display_name_column) . " AS display_name
-              FROM " . $this->connection()->quote($this->db_table) . " ORDER BY display_name";
-
-    $res = $this->connection()->query($sql);
-
-    $users =  $res->all_rows_keyed();
-    self::sortUsers($users);
-
-    return $users;
-  }
-
-
-  // Returns a database connection
-  // The connection isn't established in the constructor, but here only when it's really
-  // needed as it can be expensive establishing a remote connection.  For example
-  // method_exists(auth(), 'method') will end up calling the constructor, but a connection
-  // isn't needed just for method_exists().
-  protected function connection()
+  protected function connection(): ?DB
   {
     global $auth;
 
@@ -243,7 +201,9 @@ class AuthDbExt extends Auth
       // Establish a connection
       $port = isset($auth['db_ext']['db_port']) ? (int) $auth['db_ext']['db_port'] : null;
 
-      $connection = DBFactory::create(
+      try
+      {
+        $connection = DBFactory::create(
           $auth['db_ext']['db_system'],
           $auth['db_ext']['db_host'],
           $auth['db_ext']['db_username'],
@@ -252,6 +212,12 @@ class AuthDbExt extends Auth
           false,
           $port
         );
+      }
+      catch (\PDOException $e)
+      {
+        // Differentiate between an error in the MRBS database and the external database
+        throw new DBExternalException($e->getMessage(), $e->getCode());
+      }
     }
 
     return $connection;

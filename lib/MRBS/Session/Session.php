@@ -2,14 +2,15 @@
 declare(strict_types=1);
 namespace MRBS\Session;
 
-use MRBS\SessionHandlerDb;
-use MRBS\SessionHandlerDbException;
+use MRBS\SessionHandler\SessionHandlerDb;
+use MRBS\SessionHandler\SessionHandlerDbException;
 use MRBS\User;
 use SessionHandler;
 use function MRBS\db;
 use function MRBS\db_schema_version;
 use function MRBS\get_cookie_path;
 use function MRBS\is_https;
+use function MRBS\location_header;
 
 abstract class Session
 {
@@ -17,7 +18,9 @@ abstract class Session
   protected const SAMESITE_LAX = 'Lax';
   protected const SAMESITE_STRICT = 'Strict';
 
+  protected $lifetime;
   protected $samesite = null;
+
 
   public function __construct()
   {
@@ -29,17 +32,52 @@ abstract class Session
       $this->samesite = ($cookie_samesite_lax) ? self::SAMESITE_LAX : self::SAMESITE_STRICT;
     }
 
+    // Set the session lifetime
+    if (!isset($this->lifetime))
+    {
+      $this->lifetime = $auth['session_php']['session_expire_time'] ?? 0;
+    }
+
     // Start up sessions
-    // Default to the behaviour of previous versions of MRBS, use only
-    // session cookies - no persistent cookie.
-    $lifetime = $auth['session_php']['session_expire_time'] ?? 0;
-    $this->init($lifetime);
+    $this->init($this->lifetime);
+  }
+
+
+  /**
+   * Get the session handler to use.
+   *
+   * If the database session handler is not available, use the ordinary PHP session handler.
+   *
+   * @return SessionHandlerDb|SessionHandler
+   */
+  protected function getSessionHandler()
+  {
+    // The sessions table was only created in Upgrade 56. We test for the schema version rather than the existence of
+    // the table, because the table is renamed in later upgrades.
+    if (db_schema_version(db()) < 56)
+    {
+      return new SessionHandler();
+    }
+
+    // The DB session handler uses locks, and because we use locks elsewhere, this means we need support for multiple
+    // locks.  We need to test now, rather than catching an exception later, because resetting the session handler
+    // will reset the session id causing us to lose session data.
+    if (!db()->supportsMultipleLocks())
+    {
+      $message = "The database server does not support multiple locks, so the database session handler " .
+        "cannot be used.  Using ordinary PHP sessions instead.";
+      trigger_error($message);
+      return new SessionHandler();
+    }
+
+    // Otherwise use the DB session handler.
+    return new SessionHandlerDb();
   }
 
 
   // Normally there's no need to call init() from outside the Session classes.
-  // It only needs to be called to restart sessions, after for example a user
-  // has been logged off and you need to use session variables.
+  // It only needs to be called to restart sessions, after, for example, a user
+  // has been logged off, and you need to use session variables.
   public function init(int $lifetime) : void
   {
     global $auth;
@@ -81,46 +119,71 @@ abstract class Session
     }
     session_set_cookie_params($lifetime, $cookie_path);
 
-    $current_db_schema_version = db_schema_version();
-    // The session table was created in Upgrade 56.   Before that we will ignore any errors
-    // to do with DB sessions.
-    $session_table_should_exist = ($current_db_schema_version >= 56);
-
+    // Set the session handler and start up sessions
     try
     {
-      // The DB session handler uses locks and because we use locks elsewhere
-      // this means we need support for multiple locks.  We need to test now,
-      // rather than catching an exception, because resetting the session
-      // handler will reset the session id causing us to lose session data.
-      if (db()->supportsMultipleLocks())
+      session_set_save_handler($this->getSessionHandler(), true);
+      if (false === session_start())
       {
-        $handler = new SessionHandlerDb();
-        session_set_save_handler($handler, true);
+        throw new \Exception("session_start() failed");
       }
-      $session_started = session_start();
     }
-    catch(SessionHandlerDbException $e)
+    catch (\Exception $e)
     {
-      if ($session_table_should_exist &&
-        ($e->getCode() === SessionHandlerDbException::TABLE_NOT_EXISTS))
-      {
-        trigger_error($e->getMessage(), E_USER_WARNING);
-        $message = "Could not start DB sessions, trying ordinary PHP sessions.";
-        trigger_error($message, E_USER_WARNING);
-      }
-      $session_started = false;
-    }
-
-    if ($session_started === false)
-    {
-      $handler = new SessionHandler();
-      session_set_save_handler($handler, true);
-
+      $message = "Could not start sessions ('" . $e->getMessage() . "').";
+      $message .= " Trying ordinary PHP sessions.";
+      trigger_error($message, E_USER_WARNING);
+      session_set_save_handler(new SessionHandler(), true);
       if (false === session_start())
       {
         throw new \Exception("MRBS: could not start sessions");
       }
     }
+  }
+
+
+  protected function destroy() : void
+  {
+    // Delete the session data encryption key cookie. If we don't do this then, when
+    // a new session is created, unless the expiry is set to 0 (ie on browser close),
+    // it will have a longer lifetime than the key cookie, which when it was created
+    // was given the same lifetime as the session cookie.  Once the key cookie expires,
+    // the session handler will create a new cookie with a new key.  So when the session
+    // handler comes to decrypt the session data it will be doing so with the new key,
+    // and not the key used to encrypt it.  This will result in the Crypto library
+    // throwing a WrongKeyOrModifiedCiphertextException with the message "Integrity
+    // check failed".
+    //
+    // This needs to be done before the session is destroyed, otherwise the
+    // deleteKeyCookie method won't be able to get the session name (which it needs
+    // in order to delete the key cookie).
+    SessionHandlerDb::deleteKeyCookie();
+
+    // Unset the session variables
+    // Note that session_unset() only works if a session is active.
+    $_SESSION = [];
+    // Check whether a session is active before destroying it in order to avoid a
+    // "Trying to destroy uninitialized session" warning.
+    if (session_status() === PHP_SESSION_ACTIVE)
+    {
+      session_destroy();
+    }
+
+    // Problems have been reported on Windows IIS with session data not being
+    // written out without a call to session_write_close(). [Is this necessary
+    // after session_destroy() ??]
+    session_write_close();
+  }
+
+
+  protected function regenerate() : void
+  {
+    // Regenerate the session id
+    session_regenerate_id(true);
+
+    // Change the lifetime of the key cookie to match the new expiry - see the
+    // comment in destroy().
+    SessionHandlerDb::regenerateKeyCookie();
   }
 
 
@@ -162,6 +225,20 @@ abstract class Session
 
     // Use an empty string for anonymous bookings
     return new User('');
+  }
+
+
+  /**
+   * Log off the current user and optionally redirect to a different page.
+   *
+   * @return void|never
+   */
+  public function logoffUser(?string $redirect_url=null) : void
+  {
+    if (isset($redirect_url))
+    {
+      location_header($redirect_url);
+    }
   }
 
 

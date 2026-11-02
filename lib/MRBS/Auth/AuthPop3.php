@@ -1,24 +1,21 @@
 <?php
 namespace MRBS\Auth;
 
-/*
- * Authentication scheme that uses POP3 as the source for user
- * authentication.
+use MRBS\Exception;
+
+/**
+ * Authentication scheme that uses POP3 as the source for user authentication.
  *
- * To use this authentication scheme set the following
- * things in config.inc.php:
+ * To use this authentication scheme, set the following things in config.inc.php:
  *
- * $auth["realm"] = "MRBS";    // Or any other string
- * $auth["type"]  = "pop3";
+ *     $auth["realm"] = "MRBS"; // Or any other string
+ *     $auth["type"] = "pop3";
  *
  * Then, you may configure admin users:
  *
- * $auth["admin"][] = "pop3user1";
- * $auth["admin"][] = "pop3user2";
+ *     $auth["admin"][] = "pop3user1";
+ *     $auth["admin"][] = "pop3user2";
  */
-
-use MRBS\Exception;
-
 class AuthPop3 extends Auth
 {
   private const CONNECT_TIMEOUT = 15; // seconds
@@ -55,17 +52,6 @@ class AuthPop3 extends Auth
   }
 
 
-  /* validateUser($user, $pass)
-   *
-   * Checks if the specified username/password pair are valid
-   *
-   * $user  - The username
-   * $pass  - The password
-   *
-   * Returns:
-   *   false    - The pair are invalid or do not exist
-   *   string   - The validated username
-   */
   public function validateUser(
     #[\SensitiveParameter]
     ?string $user,
@@ -152,7 +138,8 @@ class AuthPop3 extends Auth
   }
 
 
-  // Checks whether validation of a user by email address is possible and allowed.
+  /**
+   */
   public function canValidateByEmail() : bool
   {
     return true;

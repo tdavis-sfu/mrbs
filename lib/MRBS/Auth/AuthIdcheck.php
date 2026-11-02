@@ -3,9 +3,11 @@ namespace MRBS\Auth;
 
 use MRBS\User;
 
-// For use with mod_idcheck (http://idcheck.sourceforge.net/)
-// Must have $auth['session'] set to 'remote_user'.
-
+/**
+ * For use with mod_idcheck (http://idcheck.sourceforge.net/).
+ *
+ * Must have `$auth['session']` set to 'remote_user'.
+ */
 class AuthIdcheck extends AuthNone
 {
 
@@ -22,17 +24,6 @@ class AuthIdcheck extends AuthNone
   }
 
 
-  /* validateUser($user, $pass)
-   *
-   * Checks if the specified username/password pair are valid
-   *
-   * $user  - The user name
-   * $pass  - The password
-   *
-   * Returns:
-   *   false    - The pair are invalid or do not exist
-   *   string   - The validated username
-   */
   public function validateUser(
     #[\SensitiveParameter]
     ?string $user,
@@ -45,7 +36,7 @@ class AuthIdcheck extends AuthNone
   }
 
 
-  protected function getUserFresh(string $username) : ?User
+  public function getUserFresh(string $username) : ?User
   {
     global $server;
 

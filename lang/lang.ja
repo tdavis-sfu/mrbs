@@ -62,21 +62,21 @@ $vocab["end"]                = "終了";
 $vocab["start_date"]         = "開始時刻";
 $vocab["end_date"]           = "終了時刻";
 $vocab["time"]               = "時間";
-$vocab["period"]             = "期間";
+$vocab["period_title"]       = "期間";
 $vocab["duration"]           = "所要時間";
-$vocab["second_lc"]          = "秒間";
+$vocab["second"]             = "秒間";
 $vocab["seconds"]            = "秒間";
-$vocab["minute_lc"]          = "分間";
+$vocab["minute"]             = "分間";
 $vocab["minutes"]            = "分間";
-$vocab["hour_lc"]            = "時間";
+$vocab["hour"]               = "時間";
 $vocab["hours"]              = "時間";
 $vocab["day"]                = "日間";
 $vocab["days"]               = "日間";
 $vocab["week"]               = "週間";
 $vocab["weeks"]              = "週間";
-$vocab["year_lc"]            = "年間";
+$vocab["year"]               = "年間";
 $vocab["years"]              = "年間";
-$vocab["period_lc"]          = "期間";
+$vocab["period"]             = "期間";
 $vocab["periods"]            = "期間";
 $vocab["all_day"]            = "終日";
 $vocab["area"]               = "部署";
@@ -94,12 +94,12 @@ $vocab["rep_interval"]       = "繰り返し周期";
 $vocab["skip_conflicts"]     = "過去の競合をスキップする";
 $vocab["ctrl_click"]         = "複数の部屋を選択するときは、<br>Controlキーを押しながらクリックしてください。";
 $vocab["entryid"]            = "予約ID ";
-$vocab["repeat_id"]          = "定例予約ID "; 
+$vocab["repeat_id"]          = "定例予約ID ";
 $vocab["brief_description"]  = "簡単な説明";
 $vocab["status"]             = "状況";
 $vocab["public"]             = "公開";
 $vocab["private"]            = "非公開";
-$vocab["unavailable"]        = "非公開";
+$vocab["unavailable"]        = "[非公開]";
 $vocab["is_mandatory_field"] = "は必須のフィールドです。値を指定して下さい。";
 $vocab["missing_mandatory_field"] = "必須フィールドの値が入力されていません";
 $vocab["confirmed"]          = "確認";
@@ -151,7 +151,7 @@ $vocab["schedule"]           = "予定";
 $vocab["policy"]             = "指針";
 $vocab["too_many_entries"]   = "選択されたオプションは大量のエントリーを作成します。<br>別のオプションを使用して下さい!";
 $vocab["returncal"]          = "カレンダー表示に戻る";
-$vocab["failed_to_acquire"]  = "データベースへの排他的なアクセスの確保に失敗しました"; 
+$vocab["failed_to_acquire"]  = "データベースへの排他的なアクセスの確保に失敗しました";
 $vocab["invalid_booking"]    = "無効な予約";
 $vocab["must_set_description"] = "予約のための簡単な説明を設定する必要があります。戻って入力してください。";
 $vocab["mail_subject_approved"]  = "%s MRBSのエントリが承認されました"; // $mrbs_company
@@ -178,7 +178,7 @@ $vocab["info_requested"]          = "情報が必要です";
 $vocab["min_time_before"]         = "予約開始時刻は、現在時刻から以下の時間以上空けてください - ";
 $vocab["max_time_before"]         = "予約終了時刻は、現在時刻から以下の時間以上空けないでください - ";
 $vocab["latest_booking_date"]     = "最新の予約の日取り: %s";
-$vocab["max_booking_duration"]    = "予約の最大期間は以下のとおりです。";
+$vocab["max_booking_duration"]    = '予約の最大期間は以下のとおりです。 %1$d %2$s';
 $vocab["max_per_day_global"]      = "システム全体の、ユーザーあたりの1日の最大予約数: ";
 $vocab["max_per_week_global"]     = "システム全体の、ユーザーあたりの1週間の最大予約数: ";
 $vocab["max_per_month_global"]    = "システム全体の、ユーザーあたりの1か月の最大予約数: ";
@@ -304,7 +304,7 @@ $vocab["delete_entries"]        = "エントリーを削除する";
 $vocab["delete_entries_warning"] = "警告! この操作は、検索文字列に一致する全てのエントリーを削除します。 " .
                                    "操作を取り消すことはできません。" .
                                    "継続してもよろしいですが\n\n" .
-                                   "削除されるエントリーの合計: %%s"; // The % sign is escaped because the string substitution is done by JavaScript
+                                   "削除されるエントリーの合計: %s";
 $vocab["delete_entries_failed"] = "エントリーを削除することができませんでした。";
 
 // Used in admin.php
@@ -463,7 +463,7 @@ $vocab["restore_original"]   = "元に戻す";
 // Entry types
 $vocab["type.I"]            = "内部";
 $vocab["type.E"]            = "外部";
- 
+
 // General
 $vocab["fatal_db_error"]     = "致命的なエラー: 残念ながら、データベースは現在利用可能ではありません。";
 $vocab["back"]               = "戻る";

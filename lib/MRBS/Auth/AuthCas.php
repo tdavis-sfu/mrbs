@@ -2,9 +2,9 @@
 namespace MRBS\Auth;
 
 use MRBS\Intl\Locale;
+use MRBS\Language;
 use MRBS\User;
 use phpCAS;
-use function MRBS\get_lang;
 use function MRBS\is_https;
 
 class AuthCas extends Auth
@@ -98,28 +98,21 @@ class AuthCas extends Auth
       'zh' => PHPCAS_LANG_CHINESE_SIMPLIFIED
     );
 
-    $locale = Locale::parseLocale(get_lang());
+    $locale = Locale::parseLocale(Language::getInstance()->getWebLang());
 
     if (isset($cas_lang_map[$locale['language']]))
     {
       phpCAS::setLang($cas_lang_map[$locale['language']]);
     }
 
+    // Use our own Guzzle request implementation in case curl is not available.
+    $client = phpCAS::getCasClient();
+    $client->setRequestImplementation(__NAMESPACE__ . '\AuthCasGuzzleRequest');
+
     $init_complete = true;
   }
 
 
-  /* validateUser($user, $pass)
-   *
-   * Checks if the specified username/password pair are valid
-   *
-   * $user  - The user name
-   * $pass  - The password
-   *
-   * Returns:
-   *   false    - The pair are invalid or do not exist
-   *   string   - The validated username
-   */
   public function validateUser(
     #[\SensitiveParameter]
     ?string $user,
@@ -130,7 +123,7 @@ class AuthCas extends Auth
   }
 
 
-  protected function getUserFresh(string $username) : ?User
+  public function getUserFresh(string $username) : ?User
   {
     $user = new User($username);
     $user->level = $this->getLevel($username);
@@ -140,7 +133,7 @@ class AuthCas extends Auth
   }
 
 
-  private function getLevel(string $username) : int
+  protected function getLevel(string $username) : int
   {
     global $auth;
 

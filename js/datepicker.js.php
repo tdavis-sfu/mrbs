@@ -65,7 +65,7 @@ function iPadMobileFix() {
 function getISODate(year, month, day)
 {
   <?php // toISOString() converts to UTC, so make the date a UTC date ?>
-  var date = new Date(Date.UTC(year, month, day));
+  const date = new Date(Date.UTC(year, month, day));
   return date.toISOString().split('T')[0];
 }
 
@@ -74,9 +74,9 @@ function getISODate(year, month, day)
 // format.  (Note that toISOString() returns a date in UTC time).
 function getLocalISODateString(date)
 {
-  var month = (date.getMonth() + 1).toString().padStart(2, '0');
-  var day = date.getDate().toString().padStart(2, '0');
-  var year = date.getFullYear().toString();
+  const month = (date.getMonth() + 1).toString().padStart(2, '0');
+  const day = date.getDate().toString().padStart(2, '0');
+  const year = date.getFullYear().toString();
 
   return [year, month, day].join('-');
 }
@@ -98,8 +98,8 @@ function weekStart(date, weekStarts) {
   // date-time forms are interpreted as local time. This is due to a historical spec error
   // that was not consistent with ISO 8601 but could not be changed due to web compatibility."
   ?>
-  var d = new Date(date + "T00:00:00");
-  var diff = d.getDay() - weekStarts;
+  const d = new Date(date + "T00:00:00");
+  let diff = d.getDay() - weekStarts;
   if (diff < 0)
   {
     diff += 7;
@@ -110,21 +110,21 @@ function weekStart(date, weekStarts) {
 
 function weekEnd(date, weekStarts) {
   <?php // Need to add a time to make sure the date is interpreted as local rather than UTC. ?>
-  var d = new Date(weekStart(date, weekStarts) + "T00:00:00");
+  const d = new Date(weekStart(date, weekStarts) + "T00:00:00");
   d.setDate(d.getDate() + 6);
   return getLocalISODateString(d);
 }
 
 function monthStart(date) {
   <?php // Need to add a time to make sure the date is interpreted as local rather than UTC. ?>
-  var d = new Date(date + "T00:00:00");
+  const d = new Date(date + "T00:00:00");
   d.setDate(1);
   return getLocalISODateString(d);
 }
 
 function monthEnd(date) {
   <?php // Need to add a time to make sure the date is interpreted as local rather than UTC. ?>
-  var d = new Date(date + "T00:00:00");
+  const d = new Date(date + "T00:00:00");
   <?php
   // Set the date to the first of the month, because otherwise we will
   // advance by two months when incrementing the month below if we're at the
@@ -140,13 +140,13 @@ function monthEnd(date) {
 // Returns an array of dates in the range startDate..endDate, optionally
 // excluding hidden days.
 function datesInRange(startDate, endDate, excludeHiddenDays) {
-  var result=[];
+  const result = [];
   <?php // Need to add a time to make sure the date is interpreted as local rather than UTC. ?>
-  var e=new Date(endDate + "T00:00:00");
-  var hiddenDays = [<?php echo implode(',', $hidden_days)?>];
+  const e = new Date(endDate + "T00:00:00");
+  const hiddenDays = [<?php echo implode(',', $hidden_days)?>];
 
   <?php // dates can be compared using > and < but not == or === ?>
-  for (var d=new Date(startDate + "T00:00:00"); !(d>e); d.setDate(d.getDate()+1))
+  for (const d=new Date(startDate + "T00:00:00"); !(d>e); d.setDate(d.getDate()+1))
   {
     if (excludeHiddenDays && (hiddenDays.indexOf(d.getDay()) >= 0))
     {
@@ -160,7 +160,8 @@ function datesInRange(startDate, endDate, excludeHiddenDays) {
 
 $(document).on('page_ready', function() {
 
-  var locales = $('body').data('langPrefs');
+  const locales = args.langPrefs;
+  let minicalendars;
 
   <?php
   // Set up datepickers.  We convert all inputs of type 'date' into flatpickr
@@ -171,10 +172,10 @@ $(document).on('page_ready', function() {
   // Could use new URLSearchParams(document.currentScript.src); and get the lang parameter from the
   // file's query string, but document.currentScript is not supported by IE (though that probably
   // doesn't matter much anymore).
-  if (null !== ($flatpickr_lang_path = get_flatpickr_lang_path()))
+  if (null !== ($flatpickr_lang_path = Language::getInstance()->getFlatpickrLangPath()))
   {
     // Map the flatpickr lang file onto a flatpickr l10ns property and then localize
-    echo 'flatpickr.localize(flatpickr.l10ns["' . get_flatpickr_property($flatpickr_lang_path) . '"]);';
+    echo 'flatpickr.localize(flatpickr.l10ns["' . Language::getFlatpickrProperty($flatpickr_lang_path) . '"]);';
   }
 
 
@@ -189,7 +190,7 @@ $(document).on('page_ready', function() {
   //    everything    All other format strings are treated as 'Y-m-d'.
   //    else
   ?>
-  var formatDate = function(dateObj, formatStr) {
+  const formatDate = function(dateObj, formatStr) {
       <?php
       // If window.Intl is supported then we can format dates in the user's preferred
       // locale.  Otherwise, in practice just IE10, they have to make do with ISO
@@ -197,6 +198,20 @@ $(document).on('page_ready', function() {
       ?>
       if (window.Intl && (formatStr === 'custom'))
       {
+        <?php
+        if ($language_debug)
+        {
+          ?>
+          console.debug("MRBS language preferences: " + JSON.stringify(locales));
+          console.debug("MRBS: locales supported by Intl.DateTimeFormat: " + JSON.stringify(Intl.DateTimeFormat.supportedLocalesOf(locales)));
+          <?php
+        }
+        // Check whether we can use our first choice locale for date and time formatting.
+        ?>
+        if (!Intl.DateTimeFormat.supportedLocalesOf(locales[0]).length)
+        {
+          console.warn("MRBS: Intl.DateTimeFormat in this browser does not support the '" + locales[0] + "' locale.");
+        }
         return (typeof locales === 'undefined') ?
                 new Intl.DateTimeFormat().format(dateObj) :
                 new Intl.DateTimeFormat(locales).format(dateObj);
@@ -206,27 +221,24 @@ $(document).on('page_ready', function() {
     };
 
 
-  var onDayCreate = function(dObj, dStr, fp, dayElem) {
+  const onDayCreate = function(dObj, dStr, fp, dayElem) {
       <?php
-      // If this is a hidden day and the user is a booking admin then add a class to
-      // the day so that it can be styled differently.  If they're not a booking admin
-      // the day will be disabled - see later on in this file.
-      if (!empty($hidden_days))
-      {
-        ?>
-        if (args.isBookAdmin)
-        {
-          var hiddenDays = [<?php echo implode(',', $hidden_days)?>];
-          if (hiddenDays.indexOf(dayElem.dateObj.getDay()) >= 0) {
-            dayElem.classList.add('mrbs-hidden');
-          }
-        }
-        <?php
-      }
+      // If the datepicker is used for navigation, and this is a hidden day, and the user is
+      // a booking admin, then add a class to the day so that it can be styled differently.
+      // If they're not a booking admin, and it's a navigation datepicker, the day will be
+      // disabled - see later on in this file.
       ?>
+      const hiddenDays = [<?php echo implode(',', $hidden_days)?>];
+      if (hiddenDays.length &&
+          args.isBookAdmin &&
+          fp.altInput.classList.contains('navigation') &&
+          (hiddenDays.indexOf(dayElem.dateObj.getDay()) >= 0))
+      {
+        dayElem.classList.add('mrbs-hidden');
+      }
 
       <?php // And add a class if it's a weekend day ?>
-      var weekDays = [<?php echo implode(',', $weekdays)?>];
+      const weekDays = [<?php echo implode(',', $weekdays)?>];
       if (weekDays.indexOf(dayElem.dateObj.getDay()) < 0) {
         dayElem.classList.add('mrbs-weekend');
       }
@@ -239,109 +251,142 @@ $(document).on('page_ready', function() {
   ?>
   function syncCals(instance)
   {
-    var thisId = instance.element.attributes.id.nodeValue,
-        thisIndex = parseInt(thisId.substring(3), 10),
-        currentMonth = parseInt(instance.currentMonth, 10),
-        currentYear = parseInt(instance.currentYear, 10);
+    const thisId = instance.element.attributes.id.nodeValue;
+    const thisIndex = parseInt(thisId.substring(3), 10);
+    const currentMonth = parseInt(instance.currentMonth, 10);
+    const currentYear = parseInt(instance.currentYear, 10);
 
     $.each(minicalendars, function(key, value) {
         if (value.element.attributes.id.nodeValue !== thisId)
         {
-          var index = parseInt(value.element.attributes.id.nodeValue.substring(3), 10);
+          const index = parseInt(value.element.attributes.id.nodeValue.substring(3), 10);
           value.jumpToDate(getISODate(currentYear, currentMonth + index - thisIndex, 1));
         }
       });
   }
 
 
-  var onMonthChange = function(selectedDates, dateStr, instance) {
-      syncCals(instance);
-    };
+  const onMonthChange = function (selectedDates, dateStr, instance) {
+    syncCals(instance);
+  };
 
-  var onYearChange = function(selectedDates, dateStr, instance) {
-      syncCals(instance);
-    };
+  const onYearChange = function (selectedDates, dateStr, instance) {
+    syncCals(instance);
+  };
 
-  var onMinicalChange = function(selectedDates, dateStr, instance) {
-      <?php
-      // The order of the query string parameters is important here.  It needs to be the
-      // same as the order in the Prev and Next navigation links so that the pre-fetched
-      // pages can be used when possible.
-      ?>
-      var href = 'index.php';
-      href += '?view=' + args.view;
-      href += '&page_date=' + dateStr;
-      href += '&area=' + args.area;
-      href += '&room=' + args.room;
-      if (args.site)
-      {
-        href += '&site=' + encodeURIComponent(args.site);
-      }
-      <?php
-      // Set the new date in the mini-calendar, in order to avoid the previous one
-      // still showing as selected.
-      // TODO: change the date in the other mini-calendar of the date appears there as well?
-      ?>
-      instance.setDate([selectedDates[0], selectedDates[0]], false);
-      updateBody(href);  <?php // Update the body via an Ajax call to avoid flickering ?>
-    };
+  const onMinicalChange = function (selectedDates, dateStr, instance) {
+    <?php
+    // The order of the query string parameters is important here.  It needs to be the
+    // same as the order in the Prev and Next navigation links so that the pre-fetched
+    // pages can be used when possible.
+    ?>
+    let href = 'index.php';
+    href += '?view=' + args.view;
+    href += '&page_date=' + dateStr;
+    href += '&area=' + args.area;
+    href += '&room=' + args.room;
+    if (args.site) {
+      href += '&site=' + encodeURIComponent(args.site);
+    }
+    <?php
+    // Set the new date in the mini-calendar, in order to avoid the previous one
+    // still showing as selected.
+    // TODO: change the date in the other mini-calendar of the date appears there as well?
+    ?>
+    instance.setDate([selectedDates[0], selectedDates[0]], false);
+    updateBody(href);  <?php // Update the body via an Ajax call to avoid flickering ?>
+  };
 
-  var lastValidDate = {};
+  const lastValidDate = {};
 
   <?php
   $date_format = get_date_format();
   ?>
 
-  var config = {
-      plugins: [iPadMobileFix()],
-      dateFormat: 'Y-m-d',
-      altInput: true,
-      altFormat: <?php echo "'" . get_date_format() . "'" ?>,
+  const config = {
+    plugins: [iPadMobileFix()],
+    dateFormat: 'Y-m-d',
+    altInput: true,
+    altFormat: <?php echo "'" . get_date_format() . "'" ?>,
+    <?php
+    if ($date_format == 'custom') {
+      echo "formatDate: formatDate,\n";
+    }
+    ?>
+    onDayCreate: onDayCreate,
+    locale: {firstDayOfWeek: <?php echo $weekstarts ?>},
+    onChange: function (selectedDates, dateStr, instance) {
+      const element = $(instance.element);
+      const submit = element.data('submit');
+      const elementName = element.attr('name');
       <?php
-      if ($date_format == 'custom')
-      {
-        echo "formatDate: formatDate,\n";
-      }
+      // Flatpickr allows the user to delete the date in the input field, even when allowInput
+      // is false, resulting in an empty string, which then causes problems for edit_entry_handler.php.
+      // See https://github.com/flatpickr/flatpickr/issues/936 and
+      // https://github.com/flatpickr/flatpickr/pull/2252. At the time of writing the PR has not been
+      // merged.  To get round this we substitute an empty string for the last known valid date,
+      // but only for required inputs.
       ?>
-      onDayCreate: onDayCreate,
-      locale: {firstDayOfWeek: <?php echo $weekstarts ?>},
-      onChange: function(selectedDates, dateStr, instance) {
-        var element = $(instance.element);
-        var submit = element.data('submit');
-        var elementName = element.attr('name');
-        <?php
-        // Flatpickr allows the user to delete the date in the input field, even when allowInput
-        // is false, resulting in an empty string, which then causes problems for edit_entry_handler.php.
-        // See https://github.com/flatpickr/flatpickr/issues/936 and
-        // https://github.com/flatpickr/flatpickr/pull/2252 . At the time of writing the PR has not been
-        // merged.  To get round this we substitute an empty string for the last known valid date,
-        // but only for required inputs.
-        ?>
-        if (dateStr) {
-          lastValidDate[elementName] = dateStr;
-        }
-        else if (element.prop('required') && lastValidDate[elementName]) {
-          instance.setDate(lastValidDate[elementName]);
-        }
-        <?php // Submit will be set for the datepicker in the banner ?>
-        if (submit) {
-          $('#' + submit).trigger('submit');
-        }
-        else {
-          element.trigger('change');
-        }
-      },
-      onReady: function(selectedDates, dateStr, instance) {
-        if (instance.altInput.ariaLabel === null) {
-          instance.altInput.ariaLabel = instance.input.ariaLabel;
-        }
-        if (dateStr) {
-          lastValidDate[instance.element.getAttribute('name')] = dateStr;
-        }
+      if (dateStr) {
+        lastValidDate[elementName] = dateStr;
+      } else if (element.prop('required') && lastValidDate[elementName]) {
+        instance.setDate(lastValidDate[elementName]);
       }
-    };
+      <?php // Submit will be set for the datepicker in the banner ?>
+      if (submit) {
+        $('#' + submit).trigger('submit');
+      } else {
+        element.trigger('change');
+      }
+    },
+    onReady: function (selectedDates, dateStr, instance) {
+      if (instance.altInput.ariaLabel === null) {
+        instance.altInput.ariaLabel = instance.input.ariaLabel;
+      }
+      if (dateStr) {
+        lastValidDate[instance.element.getAttribute('name')] = dateStr;
+      }
+    }
+  };
+
 
   <?php
+  // Setting weekNumbers causes flatpickr not to use the native datepickers on mobile
+  // devices.  As these are generally better than flatpickr's, it's probably better
+  // to have the native datepicker and do without the week numbers.
+  ?>
+  if (isMobile())
+  {
+    $('input.flatpickr-input').width('auto');
+  }
+  else
+  {
+    <?php // Only display the week number if the MRBS week starts on the first day of the week ?>
+    config.weekNumbers = <?php echo ($mincals_week_numbers && ($weekstarts == DateTime::firstDayOfWeek($timezone, Language::getInstance()->getWebLocale()))) ? 'true' : 'false' ?>;
+  }
+
+  let fps = flatpickr('input[type="date"]:not(.navigation)', config);
+  // flatpickr will either return a single instance or an array of instances,
+  // so convert a single instance to an array so that the iteration works.
+  fps = (Array.isArray(fps) ? fps : [fps]);
+  fps.forEach(function(fp) {
+    <?php
+    // For dates that have a data-min attribute, set the minDate.
+    ?>
+    let minDate = $(fp.input).data('min');
+    if (minDate)
+    {
+      fp.set('minDate', minDate);
+      // Note that although the flatpickr documentation says this should work on mobiles, it doesn't seem to.
+      // So we manually set the 'min' attribute for mobiles.
+      $('input[type="hidden"][data-min]').next('.flatpickr-input.flatpickr-mobile').attr('min', minDate);
+    }
+  });
+
+  <?php
+  // For datepickers used for navigation we need to modify the config to take account
+  // of hidden days.
+
   // Disable hidden days, unless the user is a booking admin.  (If they're a booking
   // admin then they'll still be able to select the date, but it will be given a different
   // class so that it can be styled differently - see code above in this file.)
@@ -360,36 +405,22 @@ $(document).on('page_ready', function() {
   }
   ?>
 
+  flatpickr('input[type="date"].navigation', config);
 
   <?php
-  // Setting weekNumbers causes flatpickr not to use the native datepickers on mobile
-  // devices.  As these are generally better than flatpickr's, it's probably better
-  // to have the native datepicker and do without the week numbers.
-  ?>
-  if (isMobile())
-  {
-    $('input.flatpickr-input').width('auto');
-  }
-  else
-  {
-    <?php // Only display the week number if the MRBS week starts on the first day of the week ?>
-    config.weekNumbers = <?php echo ($mincals_week_numbers && ($weekstarts == DateTime::firstDayOfWeek($timezone, get_mrbs_locale()))) ? 'true' : 'false' ?>;
-  }
-
-  flatpickr('input[type="date"]', config);
-
-  <?php
+  // Build the mini-calendars, if required.
   if (!empty($display_mincals))
   {
     ?>
     if (!isMobile())
     {
-      var div = $('.minicalendars');
+      const div = $('.minicalendars');
       if (div.length > 0)
       {
-        for (var i = 0; i < 2; i++)
+        for (let i = 0; i < 2; i++)
         {
-          div.append($('<span class="minicalendar" id="cal' + i + '"></span>'));
+          <?php // Add the 'navigation' class so that the JavaScript knows it can use hidden days ?>
+          div.append($('<span class="minicalendar navigation" id="cal' + i + '"></span>'));
         }
         config.inline = true;
         config.onMonthChange = onMonthChange;
@@ -406,44 +437,43 @@ $(document).on('page_ready', function() {
         }
         ?>
 
-
-        var minicalendars = flatpickr('span.minicalendar', config);
+        minicalendars = flatpickr('span.minicalendar', config);
 
         $.each(minicalendars, function (key, value) {
-            var startDate, endDate;
-            if (args.view === 'month')
-            {
-              startDate = monthStart(args.pageDate);
-              endDate = monthEnd(args.pageDate);
-            }
-            else if (args.view === 'week')
-            {
-              startDate = weekStart(args.pageDate, <?php echo $weekstarts?>);
-              endDate = weekEnd(args.pageDate, <?php echo $weekstarts?>);
-            }
-            else
-            {
-              startDate = args.pageDate;
-              endDate = startDate;
-            }
-            <?php
-            if (empty($hidden_days))
-            {
-              ?>
-              value.setDate([startDate, endDate]);
-              <?php
-            }
-            else
-            {
-              // If we've got hidden days then highlight in the mini-calendars those
-              // days in the range that are not hidden.
-              ?>
-              value.setDate(datesInRange(startDate, endDate, true));
-              <?php
-            }
+          let startDate, endDate;
+          if (args.view === 'month')
+          {
+            startDate = monthStart(args.pageDate);
+            endDate = monthEnd(args.pageDate);
+          }
+          else if (args.view === 'week')
+          {
+            startDate = weekStart(args.pageDate, <?php echo $weekstarts?>);
+            endDate = weekEnd(args.pageDate, <?php echo $weekstarts?>);
+          }
+          else
+          {
+            startDate = args.pageDate;
+            endDate = startDate;
+          }
+          <?php
+          if (empty($hidden_days))
+          {
             ?>
-            value.changeMonth(key);
-          });
+            value.setDate([startDate, endDate]);
+            <?php
+          }
+          else
+          {
+            // If we've got hidden days then highlight in the mini-calendars those
+            // days in the range that are not hidden.
+            ?>
+            value.setDate(datesInRange(startDate, endDate, true));
+            <?php
+          }
+          ?>
+          value.changeMonth(key);
+        });
 
         <?php
         // Align the top of the mini-calendars with the top of the navigation bar

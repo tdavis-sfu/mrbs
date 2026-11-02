@@ -65,22 +65,22 @@ $vocab["end"]                = "Vég";
 $vocab["start_date"]         = "Kezdés időpontja";
 $vocab["end_date"]           = "Befejezés időpontja";
 $vocab["time"]               = "Idő";
-$vocab["period"]             = "Ismétlődés";
+$vocab["period_title"]       = "Ismétlődés";
 $vocab["duration"]           = "Időtartam";
-$vocab["second_lc"]          = "másodperc";
+$vocab["second"]             = "másodperc";
 $vocab["seconds"]            = "másodperc";
-$vocab["minute_lc"]          = "perc";
+$vocab["minute"]             = "perc";
 $vocab["minutes"]            = "perc";
-$vocab["hour_lc"]            = "óra";
+$vocab["hour"]               = "óra";
 $vocab["hours"]              = "óra";
 $vocab["day"]                = "nap";
 $vocab["days"]               = "nap";
 $vocab["week"]               = "hét";
 $vocab["weeks"]              = "hét";
-$vocab["year_lc"]            = "év";
+$vocab["year"]               = "év";
 $vocab["years"]              = "év";
 // gkiss - ez nem biztos hogy jó!
-$vocab["period_lc"]          = "ismétlődés";
+$vocab["period"]             = "ismétlődés";
 $vocab["periods"]            = "ismétlődés";
 $vocab["all_day"]            = "Egész nap";
 $vocab["area"]               = "Hely";
@@ -97,12 +97,12 @@ $vocab["rep_rep_day"]        = "Ismétlődés napja";
 $vocab["skip_conflicts"]     = "Múltbéli ütközések figyelmen kívül hagyása";
 $vocab["ctrl_click"]         = "A Ctrl gomb nyomva tartásával több helyet is kijelölhetsz.";
 $vocab["entryid"]            = "Bejegyzés azonosító ";
-$vocab["repeat_id"]          = "Ismétlődés azonosító "; 
+$vocab["repeat_id"]          = "Ismétlődés azonosító ";
 $vocab["brief_description"]  = "rövid leírás.";
 $vocab["status"]             = "Állapot";
 $vocab["public"]             = "Nyilvános";
 $vocab["private"]            = "Privát";
-$vocab["unavailable"]        = "Privát";
+$vocab["unavailable"]        = "[Privát]";
 $vocab["is_mandatory_field"] = "kötelezően kitöltendő, kérlek, adj meg egy értéket.";
 $vocab["missing_mandatory_field"] = "Nem adtál meg értéket egy kötelezően kitöltendő mezőnek: ";
 $vocab["confirmed"]          = "Megerősített";
@@ -181,7 +181,7 @@ $vocab["reason"]                  = "Ok";
 $vocab["info_requested"]          = "Információ szükséges";
 $vocab["min_time_before"]         = "Az aktuális dátum és a foglalás kezdete közötti legkisebb megengedett időintervallum:";
 $vocab["max_time_before"]         = "Az aktuális dátum és a foglalás kezdete közötti legnagyobb megengedett időintervallum:";
-$vocab["max_booking_duration"]    = "A foglalások legnagyobb megengedett időtartama:";
+$vocab["max_booking_duration"]    = 'A foglalások legnagyobb megengedett időtartama: %1$d %2$s';
 $vocab["skip_and_book"]           = "Tovább és foglalás";
 $vocab["skip_and_book_note"]      = "A foglalás folytatása az ütközések mellőzésével";
 
@@ -293,7 +293,7 @@ $vocab["delete_entries"]        = "Bejegyzések törlése";
 $vocab["delete_entries_warning"] = "FIGYELEM! Ez a művelet törölni fogja az összes olyan rekordot " .
                                    "amire illeszkednek a keresési feltételek. Ez a művelet nem vonható vissza. " .
                                    "Biztos vagy benne, hogy törlöd a bejegyzéseket?\n\n" .
-                                   "Törlendő rekordok száma: %%s"; // The % sign is escaped because the string substitution is done by JavaScript
+                                   "Törlendő rekordok száma: %s";
 $vocab["delete_entries_failed"] = "A bejegyzéseket nem sikerült törölni.";
 
 // Used in admin.php
@@ -401,7 +401,7 @@ $vocab["restore_original"]   = "Eredeti állapot visszaállítása";
 // Entry types
 $vocab["type.I"]            = "Belső";
 $vocab["type.E"]            = "Külső";
- 
+
 // General
 $vocab["fatal_db_error"]     = "Súlyos hiba történt: az adatbázis nem érhető el jelen pillanatban, kérlek, próbáld újra később.";
 $vocab["back"]               = "Vissza";

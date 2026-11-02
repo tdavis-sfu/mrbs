@@ -2,34 +2,24 @@
 declare(strict_types=1);
 namespace MRBS\Intl;
 
-// A class provides a basic emulation of PHP's IntlDateFormatter class.
-//
-// The emulation uses the deprecated function strftime() and is only necessary for older
-// PHP systems where the Intl extension isn't available.  Eventually the emulation can be
-// dispensed with.
-//
-// Note that some servers have out of date versions of the ICU library that can't be updated
-// easily.  In those cases better results can sometimes be achieved by using strftime() and
-// this can be forced by explicitly using this class.
-
 use DateTimeInterface;
 use MRBS\Exception;
+use MRBS\Language;
 use MRBS\System;
-use function MRBS\convert_to_BCP47;
-use function MRBS\get_mrbs_locale;
-use function MRBS\set_mrbs_locale;
-use function MRBS\utf8_strlen;
 
-// We need to check that the 'intl' extension is loaded because earlier versions of
-// MRBS had the IntlDateFormatter emulation class at the top level in lib.  If users
-// have upgraded by just overwriting files without deleting that file, then it will
-// be picked up by the class_exists() test and used instead of the more up-to-date
-// emulation below.
-
-// Note that there is a polyfill for IntlDateFormatter available at
-// https://github.com/symfony/polyfill-intl-icu, but it is limited to the 'en' locale.
-// There are also backwards compatibility versions of strftime() available, but
-// IntlDateFormatter is a more powerful solution.
+/**
+ * A class providing a basic emulation of PHP's IntlDateFormatter class.
+ *
+ * The emulation uses the deprecated function strftime() and is only necessary for older PHP systems where the Intl
+ * extension isn't available.  Eventually the emulation can be dispensed with.
+ *
+ * Note that some servers have out of date versions of the ICU library that can't be updated easily.  In those cases
+ * better results can sometimes be achieved by using strftime() and this can be forced by explicitly using this class.
+ *
+ * Note that there is a polyfill for IntlDateFormatter available at https://github.com/symfony/polyfill-intl-icu, but it
+ * is limited to the 'en' locale. There are also backwards compatibility versions of strftime() available, but
+ * IntlDateFormatter is a more powerful solution.
+ */
 class IntlDateFormatter
 {
   const FULL = 0;
@@ -74,6 +64,13 @@ class IntlDateFormatter
     {
       throw new Exception("Neither the IntlDateFormatter class nor the strftime() function exist on this server");
     }
+    // Emulate PHP 8.4 and later by detecting invalid locales now, in order to avoid problems later on.
+    if (isset($locale) && !System::isAvailableLocale($locale))
+    {
+      $message = 'Argument #1 ($locale) "' . $locale . '" is invalid';
+      $throwable = (version_compare(PHP_VERSION, '8.0') >= 0) ? '\ValueError' : '\Exception';
+      throw new $throwable($message);
+    }
     $this->locale = $locale;
     $this->dateType = $dateType;
     $this->timeType = $timeType;
@@ -86,7 +83,7 @@ class IntlDateFormatter
       if (is_readable($file)) {
         $patterns = parse_ini_file($file);
         if (!empty($patterns)) {
-          $pattern = $patterns[convert_to_BCP47($this->locale)] ?? $patterns[self::DEFAULT_LOCALE] ?? null;
+          $pattern = $patterns[Language::convertToBcp47($this->locale)] ?? $patterns[self::DEFAULT_LOCALE] ?? null;
         }
       }
     }
@@ -171,42 +168,48 @@ class IntlDateFormatter
   }
 
 
-// Format a local time/date according to locale settings, returning the
-// result as a UTF-8 string.  This function is based on strftime()
-// $time can be an int or a float (union type declarations not supported until PHP 8.0)
-// $locale can either be a string or an array of locales.  If $locale
-// is not set then the current locale is used.
-//
-// This method extends the standard PHP strftime() function and adds extra formats:
-//
-//  %f  Numeric representation of the month 	      1 (for January) through 12 (for December)
-//      without leading zeroes.  Won't
-//      necessarily work in locales that don't
-//      use [0..9] for the month.
-//
-//  %i  One/two digit day of the month, with no     1 to 31
-//      leading space
-//
-//  %o  Hour in 12-hour format, with no space       1 through 12
-//      preceding single digits
-//
-//  %q  Minute in the hour, with no leading zero    4
-//
-//  %v  Seconds, with no leading zero
-//
-//  %E  Day of year, with no leading zeroes
+  // Format a local time/date according to locale settings, returning the
+  // result as a UTF-8 string.  This function is based on strftime()
+  // $time can be an int or a float (union type declarations not supported until PHP 8.0)
+  // $locale can either be a string or an array of locales.  If $locale
+  // is not set then the current locale is used.
+  //
+  // This method extends the standard PHP strftime() function and adds extra formats:
+  //
+  //  %f  Numeric representation of the month 	      1 (for January) through 12 (for December)
+  //      without leading zeroes.  Won't
+  //      necessarily work in locales that don't
+  //      use [0..9] for the month.
+  //
+  //  %i  One/two digit day of the month, with no     1 to 31
+  //      leading space
+  //
+  //  %o  Hour in 12-hour format, with no space       1 through 12
+  //      preceding single digits
+  //
+  //  %q  Minute in the hour, with no leading zero    4
+  //
+  //  %v  Seconds, with no leading zero
+  //
+  //  %E  Day of year, with no leading zeroes
   private function strftimePlus(string $format, int $timestamp): string
   {
-    $server_os = System::getServerOS();
+    $server_os = System::getServerOSFamily();
 
     // Set the temporary locale.  Note that $this->locale could be an array of locales,
     // so we need to find out which locale actually worked.
     if (!empty($this->locale)) {
       $old_locale = setlocale(LC_TIME, '0');
-      $new_locale = setlocale(LC_TIME, System::getOSlocale($this->locale));
+      if (false === ($new_locale = Language::setLocale(LC_TIME, $this->locale)))
+      {
+        $new_locale = $old_locale;
+        $locale = is_array($this->locale) ? json_encode($this->locale) : "'$this->locale'";
+        $message = "Could not set locale to $locale; continuing to use '$old_locale'";
+        trigger_error($message, E_USER_WARNING);
+      }
     }
-    elseif ($server_os == "windows") {
-      // If we are running Windows we have to set the locale again in case another script
+    elseif ($server_os == 'Windows') {
+      // If we are running Windows we have to set the locale again, in case another script
       // running in the same process has changed the locale since we first set it.  See the
       // warning on the PHP manual page for setlocale():
       //
@@ -216,8 +219,8 @@ class IntlDateFormatter
       // the script itself never called setlocale(). This happens due to other scripts
       // running in different threads of the same process at the same time, changing the
       // process-wide locale using setlocale()."
-      $new_locale = get_mrbs_locale();
-      set_mrbs_locale($new_locale);
+      $new_locale = Language::getInstance()->getWebLocale();
+      Language::setLocale(LC_ALL, $new_locale);
     }
     else {
       $new_locale = null;
@@ -234,40 +237,71 @@ class IntlDateFormatter
   }
 
 
-  // Wrapper for strftime()
+  /**
+   * Wrapper for strftime() that suppresses deprecation errors
+   *
+   * @return false|string
+   */
   private static function doStrftime(string $format, ?int $timestamp = null)
   {
-    // Temporarily suppress deprecation errors so that we are not flooded with them.
-    // We have a single message in init.inc.
+    assert(version_compare(MRBS_MIN_PHP_VERSION, '8.0.0', '<'), "The line below can be removed.");
+    $timestamp = $timestamp ?? time();  // $timestamp only became nullable in strftime() in PHP 8.0.0
+
     $error_level = error_reporting();
-    error_reporting($error_level & ~E_DEPRECATED);
+    if (version_compare(PHP_VERSION, '8.1', '>='))
+    {
+      // Temporarily suppress deprecation errors for strftime() so that we are not flooded with them.
+      // We have a single message in init.inc.
+      error_reporting($error_level & ~E_DEPRECATED);
+    }
+
     $result = strftime($format, $timestamp);
+
     error_reporting($error_level);
 
     return $result;
   }
 
 
-  private static function doStrftimePlus(string $format, int $timestamp, ?string $locale): string
+  /**
+   * Test whether a specifier is supported by strftime() and replace it with an alternative if not.
+   */
+  private static function testAndReplaceFormat(string $specifier, string $replacement, string $format) : string
   {
-    $server_os = System::getServerOS();
-
-    if ($server_os == "windows") {
-      // Some formats not supported on Windows.   Replace with suitable alternatives
-      $format = str_replace("%R", "%H:%M", $format);
-      $format = str_replace("%P", "%p", $format);
-      $format = str_replace("%l", "%I", $format);
-      $format = str_replace("%e", "%#d", $format);
+    if (false === self::doStrftime($specifier))
+    {
+      return str_replace($specifier, $replacement, $format);
     }
 
-    // %p doesn't actually work in some locales, we have to patch it up ourselves
-    if (preg_match('/%p/', $format)) {
-      $ampm = self::doStrftime('%p', $timestamp);
-      if ($ampm == '') {
-        $ampm = date('a', $timestamp);
-      }
+    return $format;
+  }
 
-      $format = preg_replace('/%p/', $ampm, $format);
+
+  private static function doStrftimePlus(string $format, int $timestamp, ?string $locale): string
+  {
+    // Test whether certain specifiers are supported on this OS for this locale.  We do an actual test,
+    // rather than just checking which OS we are running on, because it is more reliable.
+    $doubtful_specifiers = [
+      '%R' => '%H:%M',  // Not supported on Windows
+      '%P' => '%p',     // Not supported on Windows, macOS and also some locales
+      '%l' => '%I',     // Not supported on Windows
+      '%e' => '%#d'     // Not supported on Windows
+    ];
+
+    foreach ($doubtful_specifiers as $specifier => $replacement)
+    {
+      $format = self::testAndReplaceFormat($specifier, $replacement, $format);
+    }
+
+    // %p doesn't actually work in some locales, so we have to patch it up ourselves by using
+    // date() instead of strftime().
+    // Note that we may be using %p instead of %P, because %P isn't supported for this locale. If that's
+    // the case we're going to get a lowercase result, instead of uppercase as intended.  But that
+    // probably doesn't matter as that locale would almost certainly be using a 24-hour format anyway,
+    // which is why %P isn't supported in the first place.
+    if (preg_match('/%p/', $format) && (false === self::doStrftime('%p', $timestamp)))
+    {
+      $format = preg_replace('/%p/', date('a', $timestamp), $format);
     }
 
     $result = '';
@@ -276,7 +310,7 @@ class IntlDateFormatter
     $tokens = self::parseStrftimeFormat($format);
 
     foreach ($tokens as $token) {
-      if (utf8_strlen($token) === 1) {
+      if (mb_strlen($token) === 1) {
         $result .= $token;
       }
       else {

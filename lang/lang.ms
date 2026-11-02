@@ -23,7 +23,10 @@ $vocab["outstanding"]        = "Tempahan perlu pengesahan";
 $vocab["bookingsfor"]        = "Tempahan Untuk";
 $vocab["bookingsforpost"]    = ""; // Goes after the date
 $vocab["areas"]              = "Lokasi";
-$vocab["today"]              = "Hari Ini";
+$vocab["now_day"]            = "Hari Ini";
+$vocab["now_week"]           = "Hari Ini";
+$vocab["now_month"]          = "Hari Ini";
+$vocab["now_year"]           = "Hari Ini";
 $vocab["daybefore"]          = "Semalam";
 $vocab["dayafter"]           = "Esok";
 $vocab["gototoday"]          = "Hari Ini";
@@ -63,21 +66,21 @@ $vocab["end"]                = "Tamat";
 $vocab["start_date"]         = "Tempoh Mula";
 $vocab["end_date"]           = "Tempoh Tamat";
 $vocab["time"]               = "Masa";
-$vocab["period"]             = "Tempoh";
+$vocab["period_title"]       = "Tempoh";
 $vocab["duration"]           = "Durasi";
-$vocab["second_lc"]          = "saat";
+$vocab["second"]             = "saat";
 $vocab["seconds"]            = "saat";
-$vocab["minute_lc"]          = "minit";
+$vocab["minute"]             = "minit";
 $vocab["minutes"]            = "minit";
-$vocab["hour_lc"]            = "jam";
+$vocab["hour"]               = "jam";
 $vocab["hours"]              = "jam";
-$vocab["day_lc"]             = "hari";
+$vocab["day"]                = "hari";
 $vocab["days"]               = "hari";
-$vocab["week_lc"]            = "minggu";
+$vocab["week"]               = "minggu";
 $vocab["weeks"]              = "minggu";
-$vocab["year_lc"]            = "tahun";
+$vocab["year"]               = "tahun";
 $vocab["years"]              = "tahun";
-$vocab["period_lc"]          = "tempoh";
+$vocab["period"]             = "tempoh";
 $vocab["periods"]            = "tempoh";
 $vocab["all_day"]            = "Sepanjang Hari";
 $vocab["area"]               = "Lokasi";
@@ -116,7 +119,7 @@ $vocab["useful_n-weekly_value"] = "ulangan frekuensi berguna.";
 $vocab["status"]             = "Status";
 $vocab["public"]             = "Awam";
 $vocab["private"]            = "Peribadi";
-$vocab["unavailable"]        = "Peribadi";
+$vocab["unavailable"]        = "[Peribadi]";
 $vocab["is_mandatory_field"] = "ruangan wajib diisi. sila masukkan nilai.";
 $vocab["missing_mandatory_field"] = "Anda tidak memasukkan sebarang nilai pada ruangan ini";
 $vocab["confirmed"]          = "Disahkan";
@@ -203,7 +206,7 @@ $vocab["min_delete_time_before"]  = 'Anda tidak boleh meminda atau memadam tempa
 $vocab["max_delete_time_before"]  = 'Anda tidak boleh meminda atau memadam tempahan yang berakhir lebih dari %1$d %2$s';
 $vocab["earliest_booking_date"]   = "Tarikh tempahan terawal ialah %s";
 $vocab["latest_booking_date"]     = "Tarikh tempahan terakhir ialah %s";
-$vocab["max_booking_duration"]    = "tempoh tempahan maksimum adalah";
+$vocab["max_booking_duration"]    = 'tempoh tempahan maksimum adalah %1$d %2$s';
 $vocab["max_per_day_global"]      = "The maximum number of bookings per day per user across the whole system is";
 $vocab["max_per_week_global"]     = "The maximum number of bookings per week per user across the whole system is";
 $vocab["max_per_month_global"]    = "The maximum number of bookings per month per user across the whole system is";
@@ -337,7 +340,7 @@ $vocab["delete_entries"]        = "Padam entri";
 $vocab["delete_entries_warning"] = "AMARAN!  Ini akan memadamkan semua entri padanan " .
                                    "rentetan carian.  Operasi ini tidak dapat diundur.  Adakah " .
                                    "anda yakin anda  meneruskan?\n\n" .
-                                   "Jumlah entri yang akan dibuang: %%s"; // The % sign is escaped because the string substitution is done by JavaScript
+                                   "Jumlah entri yang akan dibuang: %s";
 $vocab["delete_entries_failed"] = "Entri ini tidak dapat dipadamkan.";
 
 // Used in admin.php
@@ -442,7 +445,7 @@ $vocab["name_not_unique"]    = "telah wujud.   SIla pilih nama lain.";
 
 // Used in del.php
 $vocab["deletefollowing"]    = "Ini akan memadam tempahan berikut";
-$vocab["and_n_more"]         = "dan %s lagi";  // %s rather than %d because n is the output of number_format()
+$vocab["and_n_more"]         = "dan %s lagi";  // %s rather than %d because n is the output of NumberFormatter::format()
 $vocab["sure"]               = "Adakah anda pasti?";
 $vocab["YES"]                = "YA";
 $vocab["NO"]                 = "TIDAK";

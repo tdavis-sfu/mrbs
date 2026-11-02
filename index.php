@@ -2,6 +2,8 @@
 declare(strict_types=1);
 namespace MRBS;
 
+use MRBS\Calendar\Calendar;
+use MRBS\Calendar\CalendarFactory;
 use MRBS\Form\ElementInputSubmit;
 use MRBS\Form\ElementSelect;
 use MRBS\Form\Form;
@@ -9,10 +11,10 @@ use MRBS\Intl\IntlDateFormatter;
 use OpenPsa\Ranger\Ranger;
 
 require "defaultincludes.inc";
-require_once "functions_table.inc";
 
-
-// Display the entry-type color key.
+/**
+ * Generate the HTML for the booking type colour key.
+ */
 function get_color_key() : string
 {
   global $booking_types;
@@ -37,8 +39,9 @@ function get_color_key() : string
 }
 
 
-// generates some html that can be used to select which area should be
-// displayed.
+/**
+ * Generate the HTML that can be used to select which area should be displayed.
+ */
 function make_area_select_html(string $view, int $year, int $month, int $day, int $current) : string
 {
   global $multisite, $site;
@@ -75,7 +78,7 @@ function make_area_select_html(string $view, int $year, int $month, int $day, in
            ->addSelectOptions($areas, $current, true);
     $form->addElement($select);
 
-    // Note:  the submit button will not be displayed if JavaScript is enabled
+    // Note: the Submit button will not be displayed if JavaScript is enabled
     $submit = new ElementInputSubmit();
     $submit->setAttributes(array('class' => 'js_none',
                                  'value' => get_vocab('change')));
@@ -88,6 +91,9 @@ function make_area_select_html(string $view, int $year, int $month, int $day, in
 } // end make_area_select_html
 
 
+/**
+ * Generate the HTML that can be used to select which room should be displayed.
+ */
 function make_room_select_html (string $view, int $view_all, int $year, int $month, int $day, int $area, int $current) : string
 {
   global $multisite, $site, $always_offer_view_all;
@@ -102,12 +108,12 @@ function make_room_select_html (string $view, int $view_all, int $year, int $mon
     $page_date = format_iso_date($year, $month, $day);
     $options = $rooms;
 
-    // If we are in the week or month views and there is more than one room, then add the 'all'
+    // If we are in the week, month or year views and there is more than one room, then add the 'all'
     // option to the room select, which allows the user to display all rooms in the view.
     // And if we are viewing all the rooms then make sure the current room is negative.
     // (The room select uses a negative value of $room to signify that we want to view all
     // rooms in an area.   The absolute value of $room is the current room.)
-    if (in_array($view, array('week', 'month')) && ($always_offer_view_all || ($n_rooms > 1)))
+    if (in_array($view, array('week', 'month', 'year')) && ($always_offer_view_all || ($n_rooms > 1)))
     {
       $all = -abs($current);
       if ($view_all)
@@ -141,7 +147,7 @@ function make_room_select_html (string $view, int $view_all, int $year, int $mon
            ->addSelectOptions($options, $current, true);
     $form->addElement($select);
 
-    // Note:  the submit button will not be displayed if JavaScript is enabled
+    // Note: the Submit button will not be displayed if JavaScript is enabled
     $submit = new ElementInputSubmit();
     $submit->setAttributes(array('class' => 'js_none',
                                  'value' => get_vocab('change')));
@@ -154,8 +160,9 @@ function make_room_select_html (string $view, int $view_all, int $year, int $mon
 } // end make_room_select_html
 
 
-
-// Gets the link to the next/previous day/week/month
+/**
+ * Get the link to the next/previous day/week/month/year
+ */
 function get_adjacent_link(string $view, int $view_all, int $year, int $month, int $day, int $area, int $room, int $increment) : string
 {
   $date = new DateTime();
@@ -166,15 +173,12 @@ function get_adjacent_link(string $view, int $view_all, int $year, int $month, i
     case 'day':
       $modifier = "$increment day";
       $date->modify($modifier);
-      if ($increment === 1)
+      // find the next non-hidden day
+      $i = 0;
+      while ($date->isHiddenDay() && ($i < DAYS_PER_WEEK)) // break the loop if all days are hidden
       {
-        // find the next non-hidden day
-        $i = 0;
-        while ($date->isHiddenDay() && ($i < DAYS_PER_WEEK)) // break the loop if all days are hidden
-        {
-          $i++;
-          $date->modify($modifier);
-        }
+        $i++;
+        $date->modify($modifier);
       }
       break;
     case 'week':
@@ -183,6 +187,9 @@ function get_adjacent_link(string $view, int $view_all, int $year, int $month, i
       break;
     case 'month':
       $date->modifyMonthsNoOverflow($increment);
+      break;
+    case 'year':
+      $date->modifyYearsNoOverflow($increment);
       break;
     default:
       throw new \Exception("Unknown view '$view'");
@@ -199,7 +206,9 @@ function get_adjacent_link(string $view, int $view_all, int $year, int $month, i
 }
 
 
-// Gets the link for today
+/**
+ * Get the link for today
+ */
 function get_today_link(string $view, int $view_all, int $area, int $room) : string
 {
   // Don't include a date in order to make sure that the link will result in the current
@@ -214,6 +223,9 @@ function get_today_link(string $view, int $view_all, int $area, int $room) : str
 }
 
 
+/**
+ * Generate the HTML for the location navigation element.
+ */
 function get_location_nav(string $view, int $view_all, int $year, int $month, int $day, int $area, int $room) : string
 {
   $html = '';
@@ -232,16 +244,28 @@ function get_location_nav(string $view, int $view_all, int $year, int $month, in
 }
 
 
+/**
+ * Generate the HTML for the view navigation element.
+ */
 function get_view_nav(string $current_view, int $view_all, int $year, int $month, int $day, int $area, int $room) : string
 {
+  global $max_slots_for_year_view;
+
   $html = '';
 
   $html .= '<nav class="view">';
   $html .= '<div class="container">';  // helps the CSS
 
-  $views = array('day' => 'nav_day',
-                 'week' => 'nav_week',
-                 'month' => 'nav_month');
+  $views = [
+    'day' => 'nav_day',
+    'week' => 'nav_week',
+    'month' => 'nav_month'
+  ];
+
+  if (Calendar::getNTimeSlots() <= $max_slots_for_year_view)
+  {
+    $views['year'] = 'nav_year';
+  }
 
   foreach ($views as $view => $token)
   {
@@ -255,9 +279,13 @@ function get_view_nav(string $current_view, int $view_all, int $year, int $month
 
     $query = http_build_query($vars, '', '&');
     $href = multisite("index.php?$query");
-    $html .= '<a';
-    $html .= ($view == $current_view) ? ' class="selected"' : '';
-    $html .= ' href="' . htmlspecialchars($href) . '">' . htmlspecialchars(get_vocab($token)) . '</a>';
+    $classes = [$view];
+    if ($view == $current_view)
+    {
+      $classes[] = 'selected';
+    }
+    $html .= '<a class="' . implode(' ', $classes) . '"';
+    $html .= ' href="' . escape_html($href) . '">' . escape_html(get_vocab($token)) . '</a>';
   }
 
   $html .= '</div>';
@@ -267,6 +295,9 @@ function get_view_nav(string $current_view, int $view_all, int $year, int $month
 }
 
 
+/**
+ * Generate the HTML for the arrow navigation element.
+ */
 function get_arrow_nav(string $view, int $view_all, int $year, int $month, int $day, int $area, int $room) : string
 {
   $html = '';
@@ -292,13 +323,18 @@ function get_arrow_nav(string $view, int $view_all, int $year, int $month, int $
       $title_this = get_vocab('gotothismonth');
       $title_next = get_vocab('monthafter');
       break;
+    case 'year':
+      $title_prev = get_vocab('yearbefore');
+      $title_this = get_vocab('gotothisyear');
+      $title_next = get_vocab('yearafter');
+      break;
     default:
       throw new \Exception("Unknown view '$view'");
       break;
   }
 
-  $title_prev = htmlspecialchars($title_prev);
-  $title_next = htmlspecialchars($title_next);
+  $title_prev = escape_html($title_prev);
+  $title_next = escape_html($title_next);
 
   $link_prev = get_adjacent_link($view, $view_all, $year, $month, $day, $area, $room, -1);
   $link_today = get_today_link($view, $view_all, $area, $room);
@@ -309,14 +345,14 @@ function get_arrow_nav(string $view, int $view_all, int $year, int $month, int $
   $html .= "<nav class=\"arrow\">\n";
   if ($view == 'day')
   {
-    $html .= "<a class=\"prev week symbol prefetch\" title=\"$title_prev_week\" aria-label=\"$title_prev_week\" href=\"" . htmlspecialchars($link_prev_week) . "\"></a>";
+    $html .= "<a class=\"prev week symbol prefetch\" title=\"$title_prev_week\" aria-label=\"$title_prev_week\" href=\"" . escape_html($link_prev_week) . "\"></a>";
   }
-  $html .= "<a class=\"prev symbol prefetch\" title=\"$title_prev\" aria-label=\"$title_prev\" href=\"" . htmlspecialchars($link_prev) . "\"></a>";
-  $html .= "<a title= \"$title_this\" aria-label=\"$title_this\" href=\"" . htmlspecialchars($link_today) . "\">" . get_vocab('today') . "</a>";
-  $html .= "<a class=\"next symbol prefetch\" title=\"$title_next\" aria-label=\"$title_next\" href=\"" . htmlspecialchars($link_next) . "\"></a>";
+  $html .= "<a class=\"prev symbol prefetch\" title=\"$title_prev\" aria-label=\"$title_prev\" href=\"" . escape_html($link_prev) . "\"></a>";
+  $html .= "<a title= \"$title_this\" aria-label=\"$title_this\" href=\"" . escape_html($link_today) . "\">" . get_vocab("now_$view") . "</a>";
+  $html .= "<a class=\"next symbol prefetch\" title=\"$title_next\" aria-label=\"$title_next\" href=\"" . escape_html($link_next) . "\"></a>";
   if ($view == 'day')
   {
-    $html .= "<a class=\"next week symbol prefetch\" title=\"$title_next_week\" aria-label=\"$title_next_week\" href=\"" . htmlspecialchars($link_next_week) . "\"></a>";
+    $html .= "<a class=\"next week symbol prefetch\" title=\"$title_next_week\" aria-label=\"$title_next_week\" href=\"" . escape_html($link_next_week) . "\"></a>";
   }
   $html .= "</nav>";
 
@@ -324,6 +360,9 @@ function get_arrow_nav(string $view, int $view_all, int $year, int $month, int $
 }
 
 
+/**
+ * Generate the HTML for the calendar navigation element.
+ */
 function get_calendar_nav(string $view, int $view_all, int $year, int $month, int $day, int $area, int $room, bool $hidden=false) : string
 {
   $html = '';
@@ -342,10 +381,13 @@ function get_calendar_nav(string $view, int $view_all, int $year, int $month, in
 }
 
 
+/**
+ * Generate the HTML for the date heading.
+ */
 function get_date_heading(string $view, int $year, int $month, int $day) : string
 {
   global $datetime_formats, $display_timezone, $timezone,
-         $weekstarts, $view_week_number;
+         $weekstarts, $year_start, $view_week_number;
 
   $html = '';
   $time = mktime(12, 0, 0, $month, $day, $year);
@@ -361,7 +403,7 @@ function get_date_heading(string $view, int $year, int $month, int $day) : strin
     case 'week':
       // Display the week number if required, provided the MRBS week starts on the first day
       // of the week, otherwise it's spanning two weeks and doesn't make sense.
-      if ($view_week_number && ($weekstarts == DateTime::firstDayOfWeek($timezone, get_mrbs_locale())))
+      if ($view_week_number && ($weekstarts == DateTime::firstDayOfWeek($timezone, Language::getInstance()->getWebLocale())))
       {
         $html .= '<span class="week_number">' .
                  get_vocab('week_number', datetime_format($datetime_formats['week_number'], $time)) .
@@ -370,7 +412,7 @@ function get_date_heading(string $view, int $year, int $month, int $day) : strin
       // Then display the actual dates
       $day_of_week = date('w', $time);
       $our_day_of_week = ($day_of_week + DAYS_PER_WEEK - $weekstarts) % DAYS_PER_WEEK;
-      $ranger = new Ranger(get_mrbs_locale());
+      $ranger = new Ranger(Language::getInstance()->getWebLocale());
       $ranger
         ->setRangeSeparator(get_vocab('range_separator'))
         ->setDateType($datetime_formats['view_week']['date_type'] ?? IntlDateFormatter::LONG)
@@ -384,6 +426,17 @@ function get_date_heading(string $view, int $year, int $month, int $day) : strin
 
     case 'month':
       $html .= datetime_format($datetime_formats['view_month'], $time);
+      break;
+
+    case 'year':
+      $ranger = new YearRanger(Language::getInstance()->getWebLocale());
+      $ranger->setSeparator(get_vocab('year_range_separator'));
+      $start_date = (new DateTime())->setDate($year, $month, $day);
+      $start_date->setMonthYearStart($year_start);
+      $end_date = clone $start_date;
+      $end_date->modifyMonthsNoOverflow(MONTHS_PER_YEAR - 1, true);
+      $range = $ranger->format($start_date, $end_date);
+      $html .= $range;
       break;
 
     default:
@@ -404,6 +457,9 @@ function get_date_heading(string $view, int $year, int $month, int $day) : strin
 }
 
 
+/**
+ * Generate the HTML for the message.
+ */
 function message_html() : string
 {
   $message = Message::getInstance();
@@ -437,9 +493,10 @@ if (isset($kiosk))
 
 $is_ajax = is_ajax();
 
-// If we're using the 'db' authentication type, check to see if MRBS has just been installed
+// If we're using an authentication type that supports the creation of users, eg 'db'
+// or an extension of that type, then check to see if MRBS has just been installed
 // and, if so, redirect to the edit_users page so that they can set up users.
-if (($auth['type'] == 'db') && (count(auth()->getUsers()) == 0))
+if (auth()->canCreateUsers() && (count(auth()->getUsers()) == 0))
 {
   location_header('edit_users.php');
 }
@@ -450,28 +507,21 @@ if (!checkAuthorised(this_page(), $refresh))
   exit;
 }
 
-switch ($view)
-{
-  case 'week':
-    $inner_html = week_table_innerhtml($view, $view_all, $year, $month, $day, $area, $room, $timetohighlight);
-    break;
-  case 'month':
-    $inner_html = month_table_innerhtml($view, $view_all, $year, $month, $day, $area, $room);
-    break;
-  default:
-    if ($view !== 'day')
-    {
-      trigger_error("Unknown view '$view'", E_USER_WARNING);
-    }
-    $inner_html = day_table_innerhtml($view, $year, $month, $day, $area, $room, $timetohighlight, $kiosk);
-    break;
-}
-
+$calendar = CalendarFactory::create($view, $view_all, $year, $month, $day, $area, $room, $timetohighlight, $kiosk);
+$inner_html = $calendar->innerHTML();
 $date_heading = get_date_heading($view, $year, $month, $day);
 
 if ($refresh)
 {
+  // Include the page context so that the JavaScript know which page this is
   echo json_encode(array(
+    'context' => [
+      'view' => $view,
+      'view_all' => $view_all,
+      'pageDate' => format_iso_date($year, $month, $day), // key to match that used by args
+      'area' => $area,
+      'room' => $room
+    ],
     'date_heading' => $date_heading,
     'inner_html' => $inner_html
   ));
@@ -506,8 +556,12 @@ if ($times_along_top)
 {
   $classes[] .= 'times-along-top';
 }
-if ($view_all && ($view !== 'day'))
+if (($view == 'year') || ($view_all && ($view !== 'day')))
 {
+  // "all_rooms" is a bad description as we now also use the class for a single
+  // room in the year view.  Something like "overview" would be better, but we
+  // keep using "all_rooms" for the moment because there may be people with custom
+  // CSS that have rules using "all_rooms".
   $classes[] = 'all_rooms';
 }
 

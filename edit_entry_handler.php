@@ -4,9 +4,9 @@ namespace MRBS;
 
 require 'defaultincludes.inc';
 require_once 'mrbs_sql.inc';
-require_once 'functions_ical.inc';
 require_once 'functions_mail.inc';
 
+use MRBS\Calendar\CalendarFactory;
 use MRBS\Form\ElementInputSubmit;
 use MRBS\Form\Form;
 
@@ -129,7 +129,7 @@ $form_vars = array(
   'registration_closes_value'   => 'int',
   'registration_closes_units'   => 'string',
   'registration_closes_enabled' => 'string',  // bool, actually
-  'returl'                      => 'string',
+  'returl'                      => 'url_local',
   'id'                          => 'int',
   'rep_id'                      => 'int',
   'edit_series'                 => 'bool',
@@ -236,38 +236,9 @@ foreach($fields as $field)
 {
   if (!in_array($field['name'], $standard_fields['entry']))
   {
-    switch($field['nature'])
-    {
-      case 'character':
-        $f_type = 'string';
-        break;
-      case 'integer':
-        // Smallints and tinyints are considered to be booleans
-        $f_type = (isset($field['length']) && ($field['length'] <= 2)) ? 'string' : 'int';
-        break;
-      case 'decimal':
-        $f_type = 'decimal';
-        break;
-      // We can only really deal with the types above at the moment
-      default:
-        $f_type = 'string';
-        break;
-    }
-
+    $f_type = get_form_var_type($field);
     $var = VAR_PREFIX . $field['name'];
     $custom_fields[$field['name']] = get_form_var($var, $f_type);
-
-    if (($f_type == 'int') && ($custom_fields[$field['name']] === ''))
-    {
-      $custom_fields[$field['name']] = null;
-    }
-    // Turn checkboxes into booleans
-    if (($field['nature'] == 'integer') &&
-        isset($field['length']) &&
-        ($field['length'] <= 2))
-    {
-      $custom_fields[$field['name']] = (bool) $custom_fields[$field['name']];
-    }
 
     // Trim any strings and truncate them to the maximum field length
     if (is_string($custom_fields[$field['name']]) && ($field['nature'] != 'decimal'))
@@ -276,6 +247,16 @@ foreach($fields as $field)
       $custom_fields[$field['name']] = truncate($custom_fields[$field['name']], 'entry.' . $field['name']);
     }
 
+    // For certain nullable data types convert empty strings into null values, to prevent an SQL error
+    if (in_array($field['nature'], ['decimal', 'timestamp']))
+    {
+      if ($field['is_nullable'] && (!isset($custom_fields[$field['name']]) || ($custom_fields[$field['name']] === '')))
+      {
+        $custom_fields[$field['name']] = null;
+      }
+      // TODO: Validate that the fields are valid for the SQL input before they trigger an SQL error?
+      // TODO: Rewrite all of this so that there is common form validation and processing for all forms.
+    }
   }
 }
 
@@ -328,6 +309,16 @@ if (empty($rooms))
   exit;
 }
 
+// Make sure the area corresponds to the room that is being booked
+$area = get_area($rooms[0]);
+get_area_settings($area);  // Update the area settings
+
+// and that $room is in $area
+if (get_area($room) != $area)
+{
+  $room = get_default_room($area);
+}
+
 // Don't bother with these checks if this is an Ajax request.
 if (!$is_ajax)
 {
@@ -341,18 +332,19 @@ if (!$is_ajax)
     invalid_booking(get_vocab('invalid_rep_interval'));
   }
 
-  if (count($is_mandatory_field))
+  // Check that we've got the mandatory fields
+  if (!empty($is_mandatory_field))
   {
-    foreach ($is_mandatory_field as $field => $value)
+    foreach ($is_mandatory_field as $full_field => $value)
     {
-      $field = preg_replace('/^entry\./', '', $field);
-      if ($value)
+      if (is_mandatory_field($full_field, $area))
       {
+        $field = preg_replace('/^entry\./', '', $full_field);
         if ((in_array($field, $standard_fields['entry']) && ($$field === '')) ||
             (array_key_exists($field, $custom_fields) && ($custom_fields[$field] === '')))
         {
           invalid_booking(get_vocab('missing_mandatory_field') . ' "' .
-                          get_loc_field_name(_tbl('entry'), $field) . '"');
+            get_loc_field_name(_tbl('entry'), $field) . '"');
         }
       }
     }
@@ -388,16 +380,6 @@ if ($private_enabled)
 else
 {
   $is_private = ($private_mandatory) ? $private_default : false;
-}
-
-// Make sure the area corresponds to the room that is being booked
-$area = get_area($rooms[0]);
-get_area_settings($area);  // Update the area settings
-
-// and that $room is in $area
-if (get_area($room) != $area)
-{
-  $room = get_default_room($area);
 }
 
 // Check that they really are allowed to set $no_mail;
@@ -445,7 +427,7 @@ if ($is_ajax && $commit)
         // In the calculation of $start_seconds and $end_seconds below we need to take
         // care of the case when 0000 on the day in question is across a DST boundary
         // from the current time, ie the days on which DST starts and ends.
-        case 'start_seconds';
+        case 'start_seconds':
           $date = getdate($old_booking['start_time']);
           $start_year = (int) $date['year'];
           $start_month = (int) $date['mon'];
@@ -455,7 +437,7 @@ if ($is_ajax && $commit)
           $start_seconds = $old_start - $start_daystart;
           $start_seconds -= cross_dst($start_daystart, $old_start);
           break;
-        case 'end_seconds';
+        case 'end_seconds':
           $date = getdate($old_booking['end_time']);
           $end_year = (int) $date['year'];
           $end_month = (int) $date['mon'];
@@ -628,7 +610,7 @@ if ($repeat_rule->getType() != RepeatRule::NONE)
   }
   if (isset($rep_end_date))
   {
-    $repeat_end_date = DateTime::createFromFormat('Y-m-d', $rep_end_date);
+    $repeat_end_date = DateTime::createFromFormat(DateTime::ISO8601_DATE, $rep_end_date);
     if ($repeat_end_date === false)
     {
       throw new Exception("Could not create repeat end date");
@@ -723,16 +705,25 @@ if (!in_array($room, $rooms))
   $room = $rooms[0];
 }
 // Find the corresponding area
-$area = mrbsGetRoomArea($room);
+$area = get_area($room);
+if (empty($area))
+{
+  // This shouldn't happen.
+  // TODO: Get rid of the area parameter from the query string, and just use the room parameter, as given the room
+  // TODO: the area is redundant.
+  trigger_error("Room with id $room doesn't exist.", E_USER_WARNING);
+}
 
 // Now construct the new query string
-$vars = array('view'      => $view ?? $default_view,
-              'view_all'  => $view_all ?? $default_view_all,
-              'year'      => $year,
-              'month'     => $month,
-              'day'       => $day,
-              'area'      => $area,
-              'room'      => $room);
+$vars = [
+  'view'      => $view ?? $default_view,
+  'view_all'  => $view_all ?? $default_view_all,
+  'year'      => $year,
+  'month'     => $month,
+  'day'       => $day,
+  'area'      => $area,
+  'room'      => $room
+];
 
 // If we're going back to the index page then add any scroll positions to the
 // query string so that the JavaScript can scroll back to the same position.
@@ -858,24 +849,11 @@ try
   // If this is an Ajax request, output the result and finish
   if ($is_ajax)
   {
-    // Generate the new HTML
     if ($commit)
     {
       // Generate the new HTML
-      require_once "functions_table.inc";
-
-      switch ($view)
-      {
-        case 'day':
-          $result['table_innerhtml'] = day_table_innerhtml($view, $year, $month, $day, $area, $room, $timetohighlight);
-          break;
-        case 'week':
-          $result['table_innerhtml'] = week_table_innerhtml($view, $view_all, $year, $month, $day, $area, $room, $timetohighlight);
-          break;
-        default:
-          throw new \Exception("Unsupported view '$view'");
-          break;
-      }
+      $calendar = CalendarFactory::create($view, $view_all, $year, $month, $day, $area, $room, $timetohighlight);
+      $result['table_innerhtml'] = $calendar->innerHTML();
     }
     http_headers(array("Content-Type: application/json"));
     echo json_encode($result);
@@ -886,12 +864,12 @@ catch (\Exception $e)
 {
   if ($is_ajax)
   {
-    output_exception_error($e, true);
+    trigger_error('Caught exception: ' . $e->getMessage(), E_USER_WARNING);
     http_response_code(500);
     exit;
   }
 
-  exception_handler($e);
+  throw $e;
 }
 
 // Everything was OK.   Go back to where we came from

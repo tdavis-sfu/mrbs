@@ -2,7 +2,7 @@
 declare(strict_types=1);
 namespace MRBS;
 
-define ('MRBS_MIN_PHP_VERSION', '7.2.0');
+define ('MRBS_MIN_PHP_VERSION', '7.2.5');
 
 // Check PHP version
 // Do it now before we start including code that might fail with a syntax error,
@@ -22,13 +22,11 @@ require_once 'lib/autoload.inc';
 require_once 'grab_globals.inc.php';   // this must be included before mrbs_auth.inc (due to WordPress - see comment in file)
 require_once 'systemdefaults.inc.php';
 require_once 'areadefaults.inc.php';
-require_once 'functions_error.inc';
 require_once 'config.inc.php';
 require_once 'site_config.inc';
 require_once 'internalconfig.inc.php';
 require_once 'functions_global.inc';
 require_once 'functions.inc';
-require_once 'language.inc';
 require_once 'theme.inc';
 require_once 'dbsys.inc';
 require_once 'mrbs_auth.inc';

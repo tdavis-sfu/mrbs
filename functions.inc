@@ -4,16 +4,122 @@ namespace MRBS;
 
 use DateInterval;
 use DateTimeZone;
+use Email\Parse;
+use IntlDatePatternGenerator;
+use InvalidArgumentException;
 use MRBS\Form\Field;
 use MRBS\Form\FieldSelect;
 use MRBS\ICalendar\RFC5545;
+use IntlDateFormatter;
+use MRBS\Intl\IntlDateFormatterFactory;
 use PHPMailer\PHPMailer\PHPMailer;
+use TypeError;
 
 require_once "mrbs_sql.inc";
 
-// Constrain an integer to fit a certain type.  Useful for making sure
-// that integers will fit within the range for a database type.
-// Only 4 byte unsigned integers supported at the moment.
+
+
+/**
+ * A wrapper for Language::getVocab() to avoid (a) having to replace
+ * get_vocab() everywhere, and (b) having to use the long method call.
+ */
+function get_vocab(string $tag, ...$values) : string
+{
+  return Language::getInstance()->getVocab($tag, Language::getInstance()->getWebLang(), ...$values);
+}
+
+
+/**
+ * A wrapper for Language::getVocab() to avoid (a) having to replace
+ * get_vocab() everywhere, and (b) having to use the long method call.
+ */
+function get_mail_vocab(string $tag, ...$values) : string
+{
+  return Language::getInstance()->getVocab($tag, Language::getInstance()->getMailLang(), ...$values);
+}
+
+
+/**
+ * A wrapper for get_vocab() that escapes the returned string for safe use in JavaScript.
+ */
+function get_js_vocab(string $tag, ...$values) : string
+{
+  return escape_js(get_vocab($tag, ...$values));
+}
+
+
+/**
+ * Get a localised booking type name.
+ */
+function get_type_vocab(string $type) : string
+{
+  return get_vocab("type.$type");
+}
+
+
+/**
+ * Get the localised field name for a user-defined table column.
+ *
+ * Looks for a tag of the format tablename.columnname (where tablename is
+ * stripped of the table prefix) and if it can't find a string for that tag will
+ * return the column name
+ */
+function get_loc_field_name(string $table, string $name) : string
+{
+  $tag = get_table_short_name($table) . ".$name";
+  $result = get_vocab($tag);
+  // If there's a string in the vocab array for $tag use that,
+  // otherwise just use the fieldname
+  return ($result === $tag) ? $name : $result;
+}
+
+
+/**
+ * Generates the Byte Order Mark (BOM) for a specific character encoding.
+ *
+ * @param string $charset The character encoding for which the BOM is required. Supported values are 'utf-8' and 'utf-16'.
+ * @return string The generated BOM string for the specified character encoding.
+ */
+function get_bom(string $charset) : string
+{
+  switch(mb_strtolower($charset))
+  {
+    case 'utf-8':
+      return pack('CCC', 0xEF, 0xBB, 0xBF);
+      break;
+    case 'utf-16':
+      return pack('S', 0xFEFF);
+      break;
+    default:
+      throw new InvalidArgumentException("Unsupported character encoding: $charset");
+      break;
+  }
+}
+
+
+/**
+ * Removes extra whitespace from the given string by replacing multiple
+ * consecutive whitespace characters with a single space.
+ *
+ * Useful for sanitising user input before it is inserted into the database, eg when the
+ * user has accidentally typed "Joe  Smith" instead of "Joe Smith"
+ */
+function remove_extra_whitespace(string $string) : string
+{
+  return preg_replace('/\s+/', ' ', $string);
+}
+
+
+/**
+ * Constrains an integer value within the range defined by the specified number of bytes.
+ *
+ * Useful for making sure that integers will fit within the range for a database type.
+ *
+ * @param int $n The integer value to be constrained.
+ * @param int<4,4> $bytes The number of bytes defining the range. Currently, only 4 bytes are supported.
+ * @param bool $unsigned Flag indicating whether the range should be treated as unsigned. Defaults to false.
+ * @return int The constrained integer value within the valid range.
+ */
 function constrain_int(int $n, int $bytes, bool $unsigned=false) : int
 {
   if (!$unsigned && ($bytes == 4))
@@ -23,25 +129,38 @@ function constrain_int(int $n, int $bytes, bool $unsigned=false) : int
   }
   else
   {
-    throw new \Exception("Other combinations not yet supported");
+    throw new InvalidArgumentException("Other combinations not yet supported");
   }
 
-  return max(min($n, $max_limit), $min_limit);
+  return clamp($n, $min_limit, $max_limit);
 }
 
 
-// Case-insensitive in_array
-// See https://www.php.net/manual/en/function.in-array.php#Hcom89256
+/**
+ * Performs a case-insensitive check if a value exists in an array.
+ *
+ * @param mixed $needle The searched value.
+ * @param array $haystack The array to search in.
+ * @param bool $strict [optional] If true, also checks the type of the needle in the haystack.
+ * @return bool Returns true if the needle is found in the haystack, false otherwise.
+ */
 function in_arrayi($needle, array $haystack, bool $strict=false) : bool
 {
-  return in_array(utf8_strtolower($needle),
-                  array_map(__NAMESPACE__ . "\\utf8_strtolower", $haystack),
-                  $strict);
+  return in_array(
+    mb_strtolower($needle),
+    array_map('mb_strtolower', $haystack),
+    $strict
+  );
 }
 
 
-
-// Checks if a string ends with one of an array of given substrings
+/**
+ * Checks if a given string ends with any of the strings in the provided array.
+ *
+ * @param string $haystack The string to search in.
+ * @param array $needles An array of strings to check as endings for the haystack.
+ * @return bool Returns true if the haystack ends with any of the strings in needles, otherwise false.
+ */
 function str_ends_with_array(string $haystack, array $needles) : bool
 {
   foreach ($needles as $needle)
@@ -56,6 +175,16 @@ function str_ends_with_array(string $haystack, array $needles) : bool
 }
 
 
+/**
+ * Generates a random token as a hexadecimal string.
+ *
+ * @param int $length The desired length of the random token.
+ * This length represents the number of bytes to generate before converting to hexadecimal,
+ * so the resulting string will be twice as long.
+ *
+ * @return string A random token as a hexadecimal string. The method uses multiple strategies
+ * for randomness, falling back to less secure options if necessary.
+ */
 function generate_token(int $length) : string
 {
   if (function_exists('random_bytes'))
@@ -77,40 +206,6 @@ function generate_token(int $length) : string
   }
 
   return md5(uniqid((string)rand(), true));
-}
-
-
-// A locale aware version of strcasecmp()
-function strcasecmp_locale(string $string1, string $string2) : int
-{
-  // Trivial case
-  if ($string1 === $string2)
-  {
-    return 0;
-  }
-
-  // Sort the array.  If the order is reversed then $string1 > $string2
-  // (When this function is being used as a callback for usort, and if the original array
-  // is sorted in ascending order, which it well might be if it's the result of
-  // an SQL query with an ORDER BY, then it's fastest to test for $string1 > $string2
-  // first, as below.)
-  $original_array = array($string1, $string2);
-  $array = $original_array;
-  asort($array,SORT_LOCALE_STRING | SORT_FLAG_CASE);
-  if ($array !== $original_array)
-  {
-    return 1;
-  }
-  // Otherwise, flip the array and try again.  If the order is reversed then $string2 > $string1
-  $original_array = array($string2, $string1);
-  $array = $original_array;
-  asort($array,SORT_LOCALE_STRING | SORT_FLAG_CASE);
-  if ($array !== $original_array)
-  {
-    return -1;
-  }
-  // Otherwise they must be equal
-  return 0;
 }
 
 
@@ -170,7 +265,25 @@ function get_sortable_name(?string $name) : ?string
 
 function compare_display_names(string $name1, string $name2) : int
 {
-  return strcasecmp_locale(get_sortable_name($name1), get_sortable_name($name2));
+  $collator = new \Collator(Language::getInstance()->getWebLocale());
+  $collator->setStrength(\Collator::SECONDARY);  // Case-insensitive, but accent-sensitive
+  return $collator->compare(get_sortable_name($name1), get_sortable_name($name2));
+}
+
+
+/**
+ * Compares two strings using a locale-aware, case-insensitive comparison.
+ * This function determines the relative order of two strings based on
+ * the current locale settings.
+ *
+ * @return int<-1,1> Returns 0 if the usernames are equal, -1 if $username1
+ * is less than $username2, and 1 if $username1 is greater than $username2.
+ */
+function compare_usernames(string $username1, string $username2) : int
+{
+  $collator = new \Collator(Language::getInstance()->getWebLocale());
+  $collator->setStrength(\Collator::SECONDARY);  // Case-insensitive, but accent-sensitive
+  return $collator->compare($username1, $username2);
 }
 
 
@@ -180,136 +293,7 @@ function is_ajax() : bool
   global $server;
 
   return (isset($server['HTTP_X_REQUESTED_WITH']) &&
-          (utf8_strtolower($server['HTTP_X_REQUESTED_WITH']) == 'xmlhttprequest'));
-}
-
-// Returns the contents of the URL. If $if_modified_since is set it will send that in
-// an 'If-Modified-Since' header in the request.  A user agent to be used in the header
-// can be specified by $user_agent, otherwise it defaults to the browser's user agent
-// if available, otherwise the string 'PHP'.
-//
-// The result is an associative array, indexed by
-//    'body'      The body of the response (FALSE on failure)
-//    'code'      The HTTP response code, eg 200 (NULL if none found)
-//    'headers'   An associative array of headers with the keys converted to lower case
-function url_get_contents(string $url, ?string $if_modified_since=null, ?string $user_agent=null) : array
-{
-  global $server;
-
-  $result = array('code' => null, 'headers' => array());
-
-  $connect_timeout  = 2;  // seconds
-  $transfer_timeout = 2;  // seconds
-  $curlopt_timeout  = 3;  // seconds
-
-  if (!isset($user_agent))
-  {
-    // If we can, set the User Agent string to be that of the browser, otherwise some sites
-    // fail with 403 errors.
-    if (isset($server['HTTP_USER_AGENT']) && ($server['HTTP_USER_AGENT'] !== '')) {
-      $user_agent = $server['HTTP_USER_AGENT'];
-    }
-    else {
-      $user_agent = 'PHP';
-    }
-  }
-
-  // If we can we use cURL to download the page because it allows us to
-  // set a timeout on establishing a connection as well as on the transfer time.
-  // (We can only set a timeout on transfer time with file_get_contents()).  The
-  // connection timeout is important because MRBS may be being used in sites
-  // where direct access to the internet is not allowed.
-  if (function_available('curl_exec'))
-  {
-    $headers = array();
-    $ch = curl_init($url);
-    curl_setopt($ch, CURLOPT_USERAGENT, $user_agent);
-    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, $connect_timeout);
-    curl_setopt($ch, CURLOPT_LOW_SPEED_TIME, $transfer_timeout);
-    curl_setopt($ch, CURLOPT_TIMEOUT, $curlopt_timeout);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-    // Use compression if we can
-    if (defined('CURLOPT_ENCODING'))
-    {
-      curl_setopt($ch, CURLOPT_ENCODING, '');
-    }
-    if (isset($if_modified_since))
-    {
-      curl_setopt($ch, CURLOPT_HTTPHEADER, array(
-          "If-Modified-Since: $if_modified_since"
-        ));
-    }
-    curl_setopt($ch, CURLOPT_HEADERFUNCTION,
-      function($curl, $header) use (&$headers)
-      {
-        // This function is called by curl for each header received
-        $headers[] = $header;
-        return strlen($header);
-      }
-    );
-    $contents = curl_exec($ch);
-    if ($contents === false)
-    {
-      trigger_error(curl_error($ch), E_USER_WARNING);
-    }
-    $result['body'] = $contents;
-
-    curl_close($ch);
-  }
-
-  // If there's no cURL then use file_get_contents()
-  else
-  {
-    // Create the stream context so that we can (a) make sure the connection is closed,
-    // because file_get_contents() does not return the contents when all the bytes
-    // have been sent, but when the connection is closed, (b) set a timeout in case
-    // the transfer is slow and (c) add a User-Agent header to prevent possible 403 errors
-    // from some sites.
-    $request_header =  array(
-        "Connection: close",
-        "User-Agent: $user_agent"
-      );
-    if (isset($if_modified_since))
-    {
-      $request_header[] = "If-Modified-Since: $if_modified_since";
-    }
-    $context = stream_context_create(
-        array(
-            'http' => array(
-                'header' => $request_header,
-                'timeout' => $transfer_timeout)
-          )
-      );
-    // Suppress any timeout warnings
-    $contents = @file_get_contents($url, false, $context);
-    if ($contents === false)
-    {
-      trigger_error("MRBS: could not get contents of $url", E_USER_WARNING);
-    }
-    $result['body'] = $contents;
-    $headers = $http_response_header;
-  }
-
-  // Tidy up the headers
-  if (is_array($headers) && !empty($headers))
-  {
-    // Get the response code from the first line
-    $status = array_shift($headers);
-    $parts = explode(' ', $status);
-    $result['code'] = (isset($parts[1])) ? intval($parts[1]) : null;
-    // Process the remainder into an associative array
-    foreach ($headers as $header)
-    {
-      $header = explode(':', $header, 2);
-      if (count($header) == 2)
-      {
-        $result['headers'][strtolower(trim($header[0]))] = trim($header[1]);
-      }
-    }
-  }
-
-  return $result;
+          (mb_strtolower($server['HTTP_X_REQUESTED_WITH']) == 'xmlhttprequest'));
 }
 
 
@@ -405,26 +389,17 @@ function maxlength(string $column) : ?int
 // rather than silent truncation of the string.
 //
 // We truncate to a maximum number of UTF8 characters rather than bytes.
-// This is OK in current versions of MySQL and PostgreSQL, though in earler
+// This is OK in current versions of MySQL and PostgreSQL, though in earlier
 // versions of MySQL (I haven't checked PostgreSQL) this could cause problems
 // as a VARCHAR(n) was n bytes long rather than n characters.
 function truncate(string $value, string $column) : string
 {
   if (null !== ($maxlength = maxlength($column)))
   {
-    return utf8_substr($value, 0, $maxlength);
+    return mb_substr($value, 0, $maxlength);
   }
 
   return $value;
-}
-
-
-// Formats a number taking into account the current locale.  (Could use
-// the NumberFormatter class, but the intl extension isn't always installed.)
-function number_format_locale($number, int $decimals=0) : string
-{
-  $locale_info = localeconv();
-  return number_format($number, $decimals, $locale_info['decimal_point'], $locale_info['thousands_sep']);
 }
 
 
@@ -474,7 +449,7 @@ function mrbs_default_timezone_set(?string $tz=null) : void
       // We don't just use a default default timezone such as UTC because then
       // people would start running into DST problems with their bookings.
       $message = 'MRBS configuration error: $timezone has not been set.';
-      // Use die() rather than fatal_error() because unless we have set the timezone
+      // Use die() rather than Errors::fatalError() because unless we have set the timezone
       // PHP starts complaining bitterly if we try and do anything remotely complicated.
       die($message);
     }
@@ -545,9 +520,13 @@ function get_cookie_path()
 }
 
 
-// Gets the url path from either $_SERVER['PHP_SELF'] or $_SERVER['REQUEST_URI'], whichever
-// happens to be non-empty.  (Some systems will not have one or the other variable set).
-function url_path()
+/**
+ * Gets the url path from either `$_SERVER['PHP_SELF']` or `$_SERVER['REQUEST_URI']`, whichever
+ * happens to be non-empty.  (Some systems will not have one or the other variable set).
+ *
+ * @return string  The url path, or the empty string if none can be found.
+ */
+function url_path() : string
 {
   global $server;
 
@@ -578,41 +557,80 @@ function url_path()
 }
 
 
-// Returns the base URL for MRBS.  If the config variable $url_base is set then that
-// overrides the automatic calculation.  A '/' will be appended to the end of the string,
-// unless it is empty or already ends in a '/'.
-function url_base() : string
+/**
+ * Check that the URL is only a local URL.  This is used to prevent open redirects.
+ *
+ * @return string|null  The URL if it is a local URL, otherwise null.
+ */
+function url_validate_local(string $url) : ?string
 {
-  global $url_base, $server;
-
-  if (isset($url_base))
+  // Check that it's a well-formed URL
+  if (false === ($parsed_url = parse_url($url)))
   {
-    $result = $url_base;
-  }
-  elseif (isset($server['HTTP_HOST']))
-  {
-    $result = $server['HTTP_HOST'] . dirname(url_path());
-  }
-  else
-  {
-    $result = '';
+    trigger_error('Cannot parse URL "' . $url . '"', E_USER_WARNING);
+    return null;
   }
 
-  // Add a scheme if we haven't got one
-  if (null === parse_url($result, PHP_URL_SCHEME))
+  $base_url = url_base();
+  if (false === ($parsed_base = parse_url($base_url)))
   {
-    $result = ((is_https()) ? 'https' : 'http') . '://' . $result;
+    trigger_error('Cannot parse $base_url of "' . $base_url . '"', E_USER_WARNING);
+    return null;
   }
 
-  // Add a trailing '/' if there isn't one
-  if (($result !== '') && (substr($result, -1) !== '/'))
+  // If one of the components before the path is set and doesn't match the base URL's component, then this is not a local URL.
+  foreach (['scheme', 'user', 'pass', 'host', 'port'] as $component)
   {
-    $result .= '/';
+    if (isset($parsed_url[$component]) && ($parsed_url[$component] !== '') && ($parsed_url[$component] !== $parsed_base[$component]))
+    {
+      return null;
+    }
   }
 
-  return $result;
+  return $url;
 }
 
+
+
+/**
+ * Validate that a given URL is *not* a local URL.  Useful for preventing Server Side Request Forgery attacks.
+ *
+ * @return string|null The URL if it is a remote URL, otherwise null.
+ */
+function url_validate_remote(string $url): ?string
+{
+  // Check the URL is valid
+  if (false === ($url = filter_var($url, FILTER_VALIDATE_URL))) {
+    return null;
+  }
+  // Check that we can parse the URL
+  if (false === ($url_components = parse_url($url))) {
+    return null;
+  }
+  // Disallow some schemes for security reasons (possible SSRF attack)
+  if (isset($url_components['scheme']) && in_arrayi($url_components['scheme'], ['file'])) {
+    return null;
+  }
+  // Check the hostname is well-formed
+  if (false === ($hostname = filter_var($url_components['host'], FILTER_VALIDATE_DOMAIN, FILTER_FLAG_HOSTNAME))) {
+    return null;
+  }
+  // Check the hostname is not 'localhost' (possible SSRF attack)
+  if (mb_strtolower($hostname) == 'localhost') {
+    return null;
+  }
+  // If the hostname is an IP address, check that it is not a local one (possible SSRF attack)
+  if (ip2long($hostname) !== false) {
+    foreach (['127.0.0.0/8', '10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16', '169.254.0.0/16'] as $cidr) {
+      // This won't work with IPv6 addresses, but IPv6 addresses will have been disallowed by the filter_var() call above
+      if (!ip_cidr_check($hostname, $cidr)) {
+        return null;
+      }
+    }
+  }
+
+  return $url;
+}
 
 
 function is_https() : bool
@@ -676,35 +694,49 @@ function this_page(bool $with_query_string=false, string $suffix='') : string
 }
 
 
-// Format a timestamp in RFC 1123 format, for HTTP headers
-//
-// e.g. Wed, 28 Jul 2010 12:43:58 GMT
-function rfc1123_date(int $timestamp) : string
+/**
+ * Format a timestamp in RFC 7231 format, for HTTP headers.
+ * E.g. Wed, 28 Jul 2010 12:43:58 GMT
+ */
+function rfc7231_date(int $timestamp) : string
 {
-  return gmdate("D, d M Y G:i:s \\G\\M\\T", $timestamp);
+  // We cannot use the DATE_RFC7231 constant because it is deprecated in PHP 8.5.
+  return gmdate("D, d M Y H:i:s \\G\\M\\T", $timestamp);
 }
 
 
-// Rebuilds a url that has been decompomosed into parts by parse_url().
-// See https://www.php.net/manual/en/function.parse-url.php#106731
+/**
+ * Rebuild a url that has been decomposed into parts by parse_url().
+ *
+ * @param array<string,string> $parts
+ */
 function build_url(array $parts) : string
 {
-    return (isset($parts['scheme']) ? "{$parts['scheme']}:" : '') .
-          ((isset($parts['user']) || isset($parts['host'])) ? '//' : '') .
-          (isset($parts['user']) ? "{$parts['user']}" : '') .
-          (isset($parts['pass']) ? ":{$parts['pass']}" : '') .
-          (isset($parts['user']) ? '@' : '') .
-          (isset($parts['host']) ? "{$parts['host']}" : '') .
-          (isset($parts['port']) ? ":{$parts['port']}" : '') .
-          (isset($parts['path']) ? "{$parts['path']}" : '') .
-          (isset($parts['query']) ? "?{$parts['query']}" : '') .
-          (isset($parts['fragment']) ? "#{$parts['fragment']}" : '');
+  // See https://stackoverflow.com/questions/4354904/php-parse-url-reverse-parsed-url#answers
+  return (isset($parts['scheme']) ? "{$parts['scheme']}:" : '') .
+         ((isset($parts['user']) || isset($parts['host'])) ? '//' : '') .
+         (isset($parts['user']) ? "{$parts['user']}" : '') .
+         (isset($parts['pass']) ? ":{$parts['pass']}" : '') .
+         (isset($parts['user']) ? '@' : '') .
+         (isset($parts['host']) ? "{$parts['host']}" : '') .
+         (isset($parts['port']) ? ":{$parts['port']}" : '') .
+         (isset($parts['path']) ? "{$parts['path']}" : '') .
+         (isset($parts['query']) ? "?{$parts['query']}" : '') .
+         (isset($parts['fragment']) ? "#{$parts['fragment']}" : '');
 }
 
 
-// A wrapper for sending a Location header.  This function will urlencode and add
-// the site parameter as necessary
-function location_header(string $location) : void
+/**
+ * A wrapper for sending a Location header.  This function will URL encode the query string parameter values
+ * and add the site parameter as necessary.
+ *
+ * @param string $location  The URL to redirect to.  This must be a local URL and the query string parameter
+ * values are assumed to have already been URL encoded.
+ * @param array $data  An array of additional query string parameters to add to the URL.  The
+ * values are assumed *not* to be URL encoded.  This is useful for passing values such as "%3F".
+ * @return never
+ */
+function location_header(string $location, array $data=[]) : void
 {
   global $debug;
 
@@ -713,16 +745,37 @@ function location_header(string $location) : void
     trigger_error("The return type can be changed to 'never'.", E_USER_NOTICE);
   }
 
+  // Check that the URL is a local URL.  If it isn't, then we don't want to redirect to it.
+  {
+    if (null === ($location = url_validate_local($location)))
+    {
+      trigger_error("Cannot redirect to URL '$location' because it is not a local URL", E_USER_WARNING);
+      $location = 'index.php';
+    }
+  }
+
   // Add the site parameter if necessary
   $location = multisite($location);
 
-  // Encode the query string if there is one
+  // Get the query string if there is one
   $parts = parse_url($location);
 
+  $query_string_parts = [];
+  // First from the query string in the URL
   if (isset($parts['query']))
   {
-    parse_str($parts['query'], $result);
-    $parts['query'] = http_build_query($result, '', '&');
+    parse_str($parts['query'], $query_string_parts);
+  }
+  // Then add in any additional query string parameters from $data
+  if (!empty($data))
+  {
+    $query_string_parts = array_merge($query_string_parts, $data);
+  }
+
+  // Rebuild the query string
+  if (!empty($query_string_parts))
+  {
+    $parts['query'] = http_build_query($query_string_parts, '', '&');
   }
 
   header('Location: ' . build_url($parts));
@@ -730,8 +783,20 @@ function location_header(string $location) : void
 }
 
 
+/**
+ * Add a query parameter in a URL.  If the parameter already exists, it will be overwritten.
+ * This function does not currently handle array parameters, eg 'room[]'.
+ *
+ * @param string|int $value
+ */
 function add_query_parameter(string $location, string $name, $value) : string
 {
+  if (str_ends_with($name, '[]'))
+  {
+    // TODO: handle arrays
+    throw new \Exception("Cannot yet handle array parameters");
+  }
+
   $parts = parse_url($location);
 
   if ($parts === false)
@@ -751,8 +816,18 @@ function add_query_parameter(string $location, string $name, $value) : string
 }
 
 
+/**
+ * Remove a query parameter from a URL.  If the parameter doesn't exist, nothing happens.
+ * This function does not currently handle array parameters, eg 'room[]'.
+ */
 function remove_query_parameter(string $location, string $name) : string
 {
+  if (str_ends_with($name, '[]'))
+  {
+    // TODO: handle arrays
+    throw new \Exception("Cannot yet handle array parameters");
+  }
+
   $parts = parse_url($location);
 
   if ($parts === false)
@@ -817,7 +892,7 @@ function expires_header(int $seconds) : void
   {
     // We also send a couple of extra headers as the "Expires" header alone
     // does not always result in caching.
-    header("Expires: " . rfc1123_date(time() + $seconds));
+    header("Expires: " . rfc7231_date(time() + $seconds));
     header("Pragma: cache");
     header("Cache-Control: max-age=$seconds");
   }
@@ -978,6 +1053,12 @@ function toTimeString(int &$dur, &$units, bool $translate=true, ?string $max_uni
     $dur = sprintf('%.3f', $dur);
     $dur = rtrim($dur, '0');  // removes trailing zeros
   }
+  // Convert any single integer values from the plural to the singular
+  elseif ($dur === 1)
+  {
+    // TODO: This isn't very elegant. Eventually we should use something like the intl MessageFormatter class.
+    $units = rtrim($units, 's');
+  }
 
   // Translate into local language if required
   if ($translate)
@@ -999,19 +1080,31 @@ function fromTimeString(&$units, $dur_units)
 
   switch($dur_units)
   {
-    case "years":
+    /** @noinspection PhpMissingBreakStatementInspection */
+    case 'years':
       $units *= 52;
-    case "weeks":
+      // Fall through
+    /** @noinspection PhpMissingBreakStatementInspection */
+    case 'weeks':
       $units *= DAYS_PER_WEEK;
-    case "days":
+      // Fall through
+    /** @noinspection PhpMissingBreakStatementInspection */
+    case 'days':
       $units *= 24;
-    case "hours":
+      // Fall through
+    /** @noinspection PhpMissingBreakStatementInspection */
+    case 'hours':
       $units *= 60;
-    case "periods":
-    case "minutes":
+      // Fall through
+    case 'periods':
+    /** @noinspection PhpMissingBreakStatementInspection */
+    case 'minutes':
       $units *= 60;
-    case "seconds":
+      // Fall through
+    case 'seconds':
       break;
+    default:
+      throw new \Exception("Unexpected value '$dur_units'");
   }
   $units = (int) $units;
 }
@@ -1028,7 +1121,7 @@ function get_period_interval(int $start_time, int $end_time, int $area_id) : int
     $area_details[$area_id] = get_area_details($area_id);
   }
 
-  $periods_per_day = count(json_decode($area_details[$area_id]['periods']));
+  $periods_per_day = count(json_decode($area_details[$area_id]['periods'], true));
   $date_time_zone = new DateTimeZone($area_details[$area_id]['timezone']);
 
   // Create start and end dates and set both dates to noon so that we can compare them
@@ -1158,45 +1251,6 @@ function date_byday(int $timestamp) : string
 }
 
 
-// Converts a BYDAY (eg "2SU") value for a given year and month into a
-// day of the month.   Returns FALSE if the day does not exist (eg for "5SU"
-// when there are only four Sundays in the month)
-function byday_to_day(int $year, int $month, string $byday)
-{
-  // First of all normalise the month and year, as we allow $month > 12
-  while ($month > 12)
-  {
-    $month -= 12;
-    $year++;
-  }
-  // Get the ordinal number and the day of the week
-  list('ordinal' => $ord, 'day' => $dow) = RFC5545::parseByday($byday);
-  // Get the starting day of the month
-  $start_dom = ($ord > 0) ? 1 : date('t', mktime(0, 0, 0, $month, 1, $year));
-  // Get the starting day of the week
-  $start_dow = date('w', mktime(0, 0, 0, $month, $start_dom, $year));
-  // Turn the BYDAY day of the week into an integer
-  $byday_dow = RFC5545::convertDayToOrd($dow);
-  // get the difference in days
-  $diff = $byday_dow - $start_dow;
-  $diff += ($ord > 0) ? DAYS_PER_WEEK : -DAYS_PER_WEEK;
-  $diff = $diff %DAYS_PER_WEEK;
-  // add in the weeks
-  $diff += ($ord > 0) ? ($ord - 1) * DAYS_PER_WEEK : ($ord + 1) * DAYS_PER_WEEK;
-
-  $day = $start_dom + $diff;
-
-  if (checkdate($month, $day, $year))
-  {
-    return $day;
-  }
-  else
-  {
-    return false;
-  }
-}
-
-
 // Returns TRUE if the time $hm1 is before $hm2
 // $hm1 and $hm2 are associative arrays indexed by 'hours' and 'minutes'.
 // The indices are chosen to allow the result of the PHP getdate() function
@@ -1319,16 +1373,18 @@ function is_in_booking_day(int $t) : bool
 }
 
 
-// Takes a Unix timestamp and sets the time, while keeping the day the same.
-// $time is a string in hh:mm format (24 hour clock)
-function timestamp_set_time(int $timestamp, string $time) : int
+/**
+ * Takes a Unix timestamp and sets the time, while keeping the day the same.
+ *
+ * @param int $timestamp
+ * @param string $hhmm The time in the format HH:MM (24-hour format is used)
+ * @param string|null $tzid The timezone identifier. If NULL, the current timezone is used.
+ */
+function timestamp_set_time(int $timestamp, string $hhmm, ?string $tzid=null) : int
 {
-  list($hour, $minute) = explode(':', $time);
-  $hour = intval($hour);
-  $minute = intval($minute);
-  $date = new DateTime();
+  $date = new DateTime('now', (isset($tzid)) ? new DateTimeZone($tzid) : null);
   $date->setTimestamp($timestamp);
-  $date->setTime($hour, $minute);
+  $date->setHourMinute($hhmm);
   return $date->getTimestamp();
 }
 
@@ -1365,16 +1421,18 @@ function fit_to_booking_day(int $t, bool $back=true) : int
 }
 
 
-// Get the duration of an interval given a start time and end time.  Corrects for
-// DST changes so that the duration is what the user would expect to see.  For
-// example 12 noon to 12 noon crossing a DST boundary is 24 hours.
-//
-// Returns an array indexed by 'duration' and 'dur_units'
-//
-//    $start_time     int     start time as a Unix timestamp
-//    $end_time       int     end time as a Unix timestamp
-//    $enable_periods boolean whether we are using periods
-//    $translate      boolean whether to translate into the browser language
+/**
+ * Get the duration of an interval given a start time and end time.
+ *
+ * Corrects for DST changes so that the duration is what the user would expect to see.
+ * For example, 12 noon to 12 noon crossing a DST boundary is 24 hours.
+ *
+ * @param int $start_time Unix timestamp
+ * @param int $end_time Unix timestamp
+ * @param bool $enable_periods Whether periods are being used
+ * @param bool $translate Whether to translate into the browser language
+ * @return array{duration: int, dur_units: string}
+ */
 function get_duration(int $start_time, int $end_time, bool $enable_periods, int $area_id, bool $translate=true) : array
 {
   $result = array();
@@ -1393,7 +1451,16 @@ function get_duration(int $start_time, int $end_time, bool $enable_periods, int 
     else
     {
       $result['duration'] = $n_periods;
-      $result['dur_units'] = ($translate) ? get_vocab('periods') : 'periods';
+      // Convert any single integer values from the plural to the singular
+      // TODO: This isn't very elegant. Eventually we should use something like the intl MessageFormatter class.
+      if ($n_periods === 1)
+      {
+        $result['dur_units'] = ($translate) ? get_vocab('period') : 'period';
+      }
+      else
+      {
+        $result['dur_units'] = ($translate) ? get_vocab('periods') : 'periods';
+      }
     }
   }
   else
@@ -1408,6 +1475,25 @@ function get_duration(int $start_time, int $end_time, bool $enable_periods, int 
 }
 
 
+// Escape a PHP variable for use in HTML
+function escape_html($value)
+{
+  switch ($type = gettype($value))
+  {
+    case 'double':
+    case 'integer':
+      return $value;
+      break;
+    case 'string':
+      return htmlspecialchars($value);
+      break;
+    default:
+      throw new TypeError("Type '$type' not supported as an argument.");
+      break;
+  }
+}
+
+
 // Escape a PHP string for use in JavaScript
 //
 // Based on a function contributed by kongaspar at gmail dot com at
@@ -1418,13 +1504,17 @@ function escape_js(string $str) : string
 }
 
 
-// Return a default area; used if no area is already known. This returns the
-// area that contains the default room (if it is set, valid and enabled) otherwise the
-// first area in alphabetical order in the database (no guarantee there is an area 1).
-// The area must be enabled for it to be considered.
-// This could be changed to implement something like per-user defaults.
+/**
+ * Get the default area id. The following order of preference is used to find an area:
+ * - the area that contains the default room (if it is set, visible, and enabled)
+ * - the first enabled area that contains an enabled, visible room
+ * - the first enabled area, regardless of the state of its rooms
+ *
+ * The area must be enabled for it to be considered.
+ */
 function get_default_area() : int
 {
+  // This function could be changed to implement something like per-user defaults.
   global $default_room;
 
   // It's possible that this function is being called during an upgrade
@@ -1478,6 +1568,20 @@ function get_default_area() : int
     }
   }
 
+  // Otherwise return the first enabled area, regardless of the state of its rooms.
+  $sql = "SELECT id FROM " . _tbl('area');
+  if ($disabled_field_exists)
+  {
+    $sql .= " WHERE disabled = 0";
+  }
+  $sql .= " ORDER BY $order_by_column LIMIT 1";
+  $area = db()->query1($sql);
+
+  if ($area > 0)
+  {
+    return $area;
+  }
+
   return 0;
 }
 
@@ -1512,7 +1616,7 @@ function get_default_room(int $area) : int
 
     if (($room >= 0) && is_visible($room))
     {
-      return (int) $room;
+      return $room;
     }
   }
 
@@ -1523,7 +1627,11 @@ function get_default_room(int $area) : int
 }
 
 
-// Return an area id for a given room
+/**
+ * Get the area id for a given room id
+ *
+ * @return int The area_id, or 0 if the room doesn't exist.
+ */
 function get_area(int $room) : int
 {
   $sql = "SELECT area_id
@@ -1533,7 +1641,24 @@ function get_area(int $room) : int
 
   $area = db()->query1($sql, array($room));
 
-  return ($area < 0 ? 0 : (int) $area);
+  return max($area, 0);
+}
+
+
+/**
+ * Get the timezone for an area
+ *
+ * @return false|string The timezone string, or the default timezone if there isn't one.
+ */
+function get_area_timezone(int $area_id)
+{
+  global $timezone;
+
+  $sql = "SELECT timezone
+            FROM " . _tbl('area') . "
+           WHERE id=:id
+           LIMIT 1";
+  return db()->query_scalar_non_bool($sql, [':id' => $area_id]) ?? $timezone;
 }
 
 
@@ -1669,7 +1794,7 @@ function get_area_settings(int $area) : void
     // Periods are stored as a JSON encoded string in the database
     if (isset($row['periods']))
     {
-      $row['periods'] = json_decode($row['periods']);
+      $row['periods'] = json_decode($row['periods'], true);
     }
 
     $row = clean_area_row($row);
@@ -1804,15 +1929,8 @@ function times_somewhere(bool $only_enabled=false) : bool
 // to make sure it's a valid date
 function format_iso_date(int $year, int $month, int $day) : string
 {
-  if (!checkdate($month, $day, $year))
-  {
-    $date = getdate(mktime(12, 0, 0, $month, $day, $year));
-    $year = $date['year'];
-    $month = $date['mon'];
-    $day = $date['mday'];
-  }
-
-  return sprintf("%04d-%02d-%02d", $year, $month, $day);
+  $date = new DateTime();
+  return $date->setDate($year, $month, $day)->format(DateTime::ISO8601_DATE);
 }
 
 
@@ -1821,7 +1939,7 @@ function format_iso_date(int $year, int $month, int $day) : string
 // on failure.
 function split_iso_date(string $iso_date)
 {
-  if (false === ($date = DateTime::createFromFormat('Y-m-d', $iso_date)))
+  if (false === ($date = DateTime::createFromFormat(DateTime::ISO8601_DATE, $iso_date)))
   {
     return false;
   }
@@ -1841,10 +1959,118 @@ function validate_iso_date(string $date) : bool
   // the inverse operation gives the original string then it is
   // valid.  (This is to check that, for example, 2021-09-31 hasn't
   // been converted into 2021-10-01).
-  $format = 'Y-m-d';
+  $format = DateTime::ISO8601_DATE;
   $datetime = DateTime::createFromFormat($format, $date);
 
   return ($datetime && ($datetime->format($format) === $date));
+}
+
+
+/**
+ * Format a timestamp.
+ *
+ * @param array<string, int|string> $format The format to use, specified by keys 'date_type', 'time_type',
+ *                                          'pattern' or 'skeleton'.
+ * @param int|null $timestamp The timestamp to format. If null, use the current time.
+ * @param string|null $locale The locale to use. If null, use the default web locale.
+ * @param string|null $tzid The timezone to use. If null, use the current default timezone.
+ */
+function datetime_format(array $format, ?int $timestamp=null, ?string $locale=null, ?string $tzid=null) : string
+{
+  global $icu_override, $timezone;
+
+  if (!isset($timestamp))
+  {
+    $timestamp = time();
+  }
+
+  if (!isset($locale))
+  {
+    $locale = Language::getInstance()->getWebLocale();
+  }
+
+  if (!isset($tzid))
+  {
+    $tzid = $timezone;
+  }
+
+  if (isset($format['skeleton']))
+  {
+    $pattern_generator = new IntlDatePatternGenerator($locale);
+    $pattern = $pattern_generator->getBestPattern($format['skeleton']);
+  }
+
+  if (!isset($pattern) || ($pattern === false) || ($pattern === ''))
+  {
+    $pattern = $format['pattern'] ?? null;
+  }
+
+  $formatter = IntlDateFormatterFactory::create(
+    $locale,
+    $format['date_type'] ?? IntlDateFormatter::FULL,
+    $format['time_type'] ?? IntlDateFormatter::FULL,
+    $tzid, null, $pattern
+  );
+
+  // If we're overriding the ICU value(s) then use those, provided that we're able to make use
+  // of them with the IntlCalendar and (standard, not emulated - hence the check for the loaded
+  // extension, rather than whether the class exists, which it always will) IntlDateFormatter classes.
+  if (isset($icu_override[$locale]) && extension_loaded('intl') && class_exists('IntlCalendar'))
+  {
+    $cal = \IntlCalendar::createInstance($tzid, $locale);
+    {
+      if (isset($icu_override[$locale]['first_day_of_week']))
+      {
+        $cal->setFirstDayOfWeek($icu_override[$locale]['first_day_of_week']);
+      }
+      if (isset($icu_override[$locale]['minimal_days_in_first_week']))
+      {
+        $cal->setMinimalDaysInFirstWeek($icu_override[$locale]['minimal_days_in_first_week']);
+      }
+    }
+    $cal->setTime($timestamp * 1000);
+    return $formatter->format($cal);
+  }
+
+  return $formatter->format($timestamp);
+}
+
+
+// Determines whether a locale (default the current locale) uses a 12-hour clock.
+// Returns NULL if it can't be determined.
+function is_ampm(?string $locale=null) : ?bool
+{
+  global $datetime_formats;
+
+  if (!isset($locale))
+  {
+    $locale = Language::getInstance()->getWebLocale();
+  }
+
+  // Work out what pattern is being used for times.
+  // If an explicit pattern has been set in the config file then use that.
+  if (isset($datetime_formats['time']['pattern']))
+  {
+    $pattern = $datetime_formats['time']['pattern'];
+  }
+  // Otherwise get the pattern that would be used by default.
+  else
+  {
+    $formatter = IntlDateFormatterFactory::create(
+      $locale,
+      $format['date_type'] ?? IntlDateFormatter::NONE,
+      $format['time_type'] ?? IntlDateFormatter::SHORT
+    );
+    $pattern = $formatter->getPattern();
+    if ($pattern === false)
+    {
+      trigger_error("Could not determine whether '$locale' uses a 12-hour clock");
+      return null;
+    }
+  }
+
+  // And see if it contains an 'a'
+  return str_contains($pattern, 'a');
 }
 
 
@@ -1927,52 +2153,53 @@ function hour_min(int $s) : string
 }
 
 
-function period_date_string(int $t, int $area_id, bool $previous_period=false) : array
+/**
+ * Convert a timestamp into a date string, when using periods.
+ *
+ * @param bool $previous_period Whether the date string for the previous period should be used (useful for the end of a period)
+ */
+function period_date_string(int $t, int $area_id, bool $previous_period=false, ?string $locale=null) : string
 {
   global $datetime_formats;
 
-  $period_names = get_period_names()[$area_id];
-  $n_periods = count($period_names);
-  $time = getdate($t);
-  $p = $time['minutes'];
+  $tzid = get_area_timezone($area_id);
 
-  if ($previous_period)
-  {
-    $p--;
-  }
-
-  $p = max($p, 0);
-  $p = min($p, $n_periods - 1);
-
-  // The separator is a ',' as a '-' leads to an ambiguous
-  // display in report.php when showing end times.
-  return array($p, $period_names[$p] . ', ' . datetime_format($datetime_formats['date'], $t));
+  // The separator is a ',' as a '-' leads to an ambiguous display in report.php when showing end times.
+  return period_time_string($t, $area_id, $previous_period) . ', ' . datetime_format($datetime_formats['date'], $t, $locale, $tzid);
 }
 
 
-function period_time_string(int $t, int $area_id, int $mod_time=0) : string
+/**
+ * Returns the name of the period in a given area for a given timestamp.
+ *
+ * @param bool $previous_period Whether the name of the previous period should be used (useful for the end of a period)
+ */
+function period_time_string(int $t, int $area_id, bool $previous_period=false) : string
 {
-  $period_names = get_period_names();
-
-  $time = getdate($t);
-  $p_num = $time["minutes"] + $mod_time;
-  if ( $p_num < 0 )
-  {
-    $p_num = 0;
-  }
-  if ( $p_num >= count($period_names[$area_id]) - 1 )
-  {
-    $p_num = count($period_names[$area_id]) - 1;
-  }
-  return $period_names[$area_id][$p_num];
+  $periods = Periods::getForArea($area_id);
+  return $periods->offsetGetByTimestamp($t, $previous_period)->name;
 }
 
-function time_date_string(int $t) : string
+
+function time_date_string(int $t, ?string $locale=null, ?string $tzid=null) : string
 {
   global $datetime_formats;
 
-  return datetime_format($datetime_formats['date_and_time'], $t);
+  return datetime_format($datetime_formats['date_and_time'], $t, $locale, $tzid);
 }
+
+
+/**
+ * Convert a timestamp into a date string
+ *
+ * @param bool $previous_period Whether the date string for the previous period should be used (useful for the end of a period)
+ */
+function date_string(bool $use_periods, int $t, int $area_id, bool $previous_period=false) : string
+{
+  $tzid = get_area_timezone($area_id);
+  return ($use_periods) ? period_date_string($t, $area_id, $previous_period) : time_date_string($t, null, $tzid);
+}
+
 
 // Wrapper for the standard PHP function nl2br() that sets $use_xhtml to false
 function mrbs_nl2br(string $string) : string
@@ -2022,17 +2249,45 @@ function validate_email_list(string $list) : bool
 // or FALSE if the email address is not valid.
 function parse_email(string $email)
 {
-  if (!filter_var($email, FILTER_VALIDATE_EMAIL))
+  $parser = new Parse(new Logger());
+  $parsed_address = $parser->parseSingle($email);
+
+  if ($parsed_address->invalid)
   {
     return false;
   }
 
-  // Note that the local part of an email address can contain the '@' character, so the
-  // domain will be the string following the last '@'.
-  $email_parts = explode('@', $email);
-  $domain = array_pop($email_parts);
-  return array('local' => implode('@', $email_parts),
-               'domain' => $domain);
+  return [
+    'local' => $parsed_address->localPartParsed,
+    'domain' => $parsed_address->domainPart
+  ];
+}
+
+
+/**
+ * Parse a string of email addresses
+ *
+ * @return array{array{name: string, address: string}} An array of arrays keyed by 'name' and 'address'
+ */
+function parse_addresses(string $address_string) : array
+{
+  $result = [];
+
+  $parser = new Parse(new Logger());
+  $parsed_addresses = $parser->parseMultiple($address_string);
+
+  foreach ($parsed_addresses->emailAddresses as $parsed_address)
+  {
+    if (!$parsed_address->invalid)
+    {
+      $result[] = [
+        'name' => $parsed_address->nameParsed,
+        'address' => $parsed_address->localPartParsed . '@' . $parsed_address->domainPart
+      ];
+    }
+  }
+
+  return $result;
 }
 
 
@@ -2121,15 +2376,6 @@ function period_index_nominal(int $s) : int
   // Periods are counted as minutes from noon, ie 1200 is $period[0],
   // 1201 $period[1], etc.
   return intval($s/60) - (12*60);
-}
-
-
-// Returns the name of the period represented by nominal seconds $s
-function period_name_nominal(int $s) : string
-{
-  global $periods;
-
-  return $periods[period_index_nominal($s)];
 }
 
 
@@ -2282,21 +2528,28 @@ function is_invalid_datetime(int $hour, int $minute, int $second, int $month, in
 }
 
 
-// Returns the modification (in seconds) necessary on account of any DST
-// transitions when going from $start to $end
+/**
+ * Calculate the modification (in seconds) necessary on account of any DST
+ * transitions when going from `$start` to `$end`.
+ *
+ * For example, if the timezone is Europe/London and `$start` is in February
+ * and `$end` is in April, then the modification is -3600 seconds.
+ *
+ * @param int $start A Unix timestamp
+ * @param int $end A Unix timestamp
+ * @return int The modification in seconds.
+ */
 function cross_dst(int $start, int $end) : int
 {
   global $timezone;
 
   // Calculate the modification using the DateTimeZone information rather than date('I', $time),
   // because not all DST transitions are 1 hour.  For example, Lord Howe Island in Australia
-  // has a 30 minute transition.
+  // has a 30-minute transition.
   $thisDateTimeZone = new DateTimeZone($timezone);
-  $startDateTime = new DateTime(date('c', $start), $thisDateTimeZone);
-  $endDateTime = new DateTime(date('c', $end), $thisDateTimeZone);
-  $modification = $startDateTime->getOffset() - $endDateTime->getOffset();
-
-  return $modification;
+  $startDateTime = (new DateTime('now', $thisDateTimeZone))->setTimestamp($start);
+  $endDateTime = (new DateTime('now', $thisDateTimeZone))->setTimestamp($end);
+  return $startDateTime->getOffset() - $endDateTime->getOffset();
 }
 
 
@@ -2437,6 +2690,29 @@ function is_private_event(bool $privacy_status) : bool
   return $privacy_status;
 }
 
+
+/**
+ * Check whether a field is mandatory for a given area.
+ */
+function is_mandatory_field(string $field, int $area_id) : bool
+{
+  global $is_mandatory_field;
+
+  if (!isset($is_mandatory_field[$field]))
+  {
+    return false;
+  }
+
+  // $is_mandatory_field can either be a boolean or an array of area ids.
+  if (is_bool($is_mandatory_field[$field]))
+  {
+    return $is_mandatory_field[$field];
+  }
+
+  return in_array($area_id, $is_mandatory_field[$field]);
+}
+
+
 // Generate a globally unique id
 //
 // We will generate a uid of the form "MRBS-uniqid-MD5hash@domain_name"
@@ -2456,9 +2732,9 @@ function generate_global_uid(string $str) : string
   {
     $uid .= 'MRBS';
   }
-  elseif (utf8_strpos($server['SERVER_NAME'], 'www.') === 0)
+  elseif (mb_strpos($server['SERVER_NAME'], 'www.') === 0)
   {
-    $uid .= utf8_substr($server['SERVER_NAME'], 4);
+    $uid .= mb_substr($server['SERVER_NAME'], 4);
   }
   else
   {
@@ -2468,31 +2744,36 @@ function generate_global_uid(string $str) : string
   return $uid;
 }
 
-// Tests whether an array is associative
-//
-// Thanks to magentix at gmail dot com at http://php.net/manual/function.is-array.php
+
+/**
+ * Tests whether an array is associative.
+ */
 function is_assoc(array $arr) : bool
 {
+  // Thanks to magentix at gmail dot com at http://php.net/manual/function.is-array.php
   return (is_array($arr) && count(array_filter(array_keys($arr),'is_string')) == count($arr));
 }
 
 
-// Checks whether we are running as a CLI module
-//
-// Based on code from mniewerth at ultimediaos dot com at
-// http://php.net/manual/features.commandline.php
+/**
+ * Checks whether the application is running as a CGI module.
+ */
 function is_cgi() : bool
 {
+  // Based on code from mniewerth at ultimediaos dot com at
+  // http://php.net/manual/features.commandline.php
   return (substr(PHP_SAPI, 0, 3) == 'cgi');
 }
 
 
-// Checks whether we are running from the CLI
-//
-// Based on code from mniewerth at ultimediaos dot com at
-// http://php.net/manual/features.commandline.php
+/**
+ * Checks whether the application is being run from the CLI.
+ */
 function is_cli() : bool
 {
+  // Based on code from mniewerth at ultimediaos dot com
+  // at http://php.net/manual/features.commandline.php
+
   global $allow_cli;
 
   if (!$allow_cli)
@@ -2515,7 +2796,20 @@ function is_cli() : bool
 }
 
 
-// Determines whether we are in kiosk mode
+/**
+ * Determines if the current request method is a GET request.
+ */
+function is_get_request() : bool
+{
+  global $server;
+
+  return (isset($server['REQUEST_METHOD']) && $server['REQUEST_METHOD'] === 'GET');
+}
+
+
+/**
+ * Checks whether the application is in kiosk mode.
+ */
 function is_kiosk_mode() : bool
 {
   return session()->isset('kiosk_password_hash');
@@ -2637,11 +2931,13 @@ function get_field_entry_input(array $params) : Field
       $field->addSelectOptions($options, $params['value']);
       break;
 
+    /** @noinspection PhpMissingBreakStatementInspection */
     case 'FieldInputDatalist':
       $options = $datalist_options[$params['field']];
       $field->addDatalistOptions($options);
     // Drop through
 
+    /** @noinspection PhpMissingBreakStatementInspection */
     case 'FieldInputText':
       if (!empty($params['required']))
       {
@@ -2691,7 +2987,7 @@ function get_field_entry_input(array $params) : Field
 //    field       the field name, eg 'entry.create_by'
 //    label       the field label
 //    name        the field name
-function get_user_field(array $params, bool $datalist=false)
+function get_user_field(array $params, bool $datalist=false) : Field
 {
   if (method_exists(auth(), 'getUsernames'))
   {
@@ -2734,3 +3030,34 @@ function get_user_field(array $params, bool $datalist=false)
   return $field;
 }
 
+
+/**
+ * Check if an IP address belongs to a specified CIDR range.
+ *
+ * Only works for IPv4 addresses.
+ */
+function ip_cidr_check (string $ip, string $cidr) : bool
+{
+  // Based on code by lukav at lukav dot com from https://www.php.net/manual/en/ref.network.php
+
+  // Validate the arguments
+  if (!str_contains($cidr, '/'))
+  {
+    throw new \InvalidArgumentException("Invalid CIDR range '$cidr'");
+  }
+  if (false === ($ip_ip = ip2long ($ip)))
+  {
+    throw new \InvalidArgumentException("Invalid IP address '$ip'");
+  }
+
+  list($net, $mask) = explode('/', $cidr);
+
+  if (false === ($ip_net = ip2long ($net)))
+  {
+    throw new \InvalidArgumentException("Invalid CIDR range '$cidr'");
+  }
+
+  $ip_mask = ~((1 << (32 - $mask)) - 1);
+
+  return (($ip_ip & $ip_mask) == ($ip_net & $ip_mask));
+}

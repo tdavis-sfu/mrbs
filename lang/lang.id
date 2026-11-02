@@ -61,21 +61,21 @@ $vocab["end"]                     = "Akhir";
 $vocab["start_date"]              = "Tanggal Mulai";
 $vocab["end_date"]                = "Tanggal Berakhir";
 $vocab["time"]                    = "Jam";
-$vocab["period"]                  = "Periode";
+$vocab["period_title"]            = "Periode";
 $vocab["duration"]                = "Durasi";
-$vocab["second_lc"]               = "Detik";
+$vocab["second"]                  = "Detik";
 $vocab["seconds"]                 = "Detik";
-$vocab["minute_lc"]               = "Menit";
+$vocab["minute"]                  = "Menit";
 $vocab["minutes"]                 = "Menit";
-$vocab["hour_lc"]                 = "Jam";
+$vocab["hour"]                    = "Jam";
 $vocab["hours"]                   = "Jam";
 $vocab["day"]                     = "Hari";
 $vocab["days"]                    = "Hari";
 $vocab["week"]                    = "Minggu";
 $vocab["weeks"]                   = "Minggu";
-$vocab["year_lc"]                 = "Tahun";
+$vocab["year"]                    = "Tahun";
 $vocab["years"]                   = "Tahun";
-$vocab["period_lc"]               = "Periode";
+$vocab["period"]                  = "Periode";
 $vocab["periods"]                 = "Periode";
 $vocab["all_day"]                 = "Sepanjang Hari";
 $vocab["area"]                    = "Area";
@@ -110,7 +110,7 @@ $vocab["brief_description"]       = "Deskripsi singkat ";
 $vocab["status"]                  = "Status";
 $vocab["public"]                  = "Publik";
 $vocab["private"]                 = "Privat";
-$vocab["unavailable"]             = "Privat";
+$vocab["unavailable"]             = "[Privat]";
 $vocab["is_mandatory_field"]      = "Kolom wajib diisi, silahkan lengkapi nilainya.";
 $vocab["missing_mandatory_field"] = "Anda belum memasukkan nilai pada kolom yang wajib diisi.";
 $vocab["confirmed"]               = "Terkonfirmasi";
@@ -192,7 +192,7 @@ $vocab["info_requested"]             = "Informasi telah dipinta";
 $vocab["min_time_before"]            = "Interval minimum antara hari ini dengan waktu pesanan adalah";
 $vocab["max_time_before"]            = "Interval maksimum antara hari ini dengan akhir waktu pesanan adalah";
 $vocab["latest_booking_date"]        = "Tanggal pesanan terakhir adalah %s";
-$vocab["max_booking_duration"]       = "Durasi maksimum untuk pesanan adalah";
+$vocab["max_booking_duration"]       = 'Durasi maksimum untuk pesanan adalah %1$d %2$s';
 $vocab["max_per_day_global"]         = "Jumlah pesanan maksimum dalam satu hari per pengguna untuk semua sistem adalah";
 $vocab["max_per_week_global"]        = "Jumlah pesanan maksimum dalam satu minggu per pengguna untuk semua sistem adalah";
 $vocab["max_per_month_global"]       = "Jumlah pesanan maksimum dalam satu bulan per pengguna untuk semua sistem adalah";
@@ -319,7 +319,7 @@ $vocab["delete_entries"]        = "Hapus entri";
 $vocab["delete_entries_warning"] = "PERHATIAN!  Aksi berikut akan menghapus entri yg cocok " .
                                    "sesuai kata kunci yg anda masukkan. Data terhapus tidak dapat dikembalikan lagi. Apakah " .
                                    "anda yakin melanjutkan?\n\n" .
-                                   "Jumlah entri yang akan dihapus: %%s"; // The % sign is escaped because the string substitution is done by JavaScript
+                                   "Jumlah entri yang akan dihapus: %s";
 $vocab["delete_entries_failed"] = "Entri tidak dapat dihapus.";
 
 // Used in admin.php
@@ -432,7 +432,7 @@ $vocab["import_icalendar"]            = "Import berkas kalender iCal";
 $vocab["area_room_settings"]          = "Area dan Ruangan";
 $vocab["other_settings"]              = "Aturan Lain";
 $vocab["import_intro"]                = "Anda bisa mengimpor berkas iCalendar RFC 5545 dengan formulir ini. " .
-                                        "Bila ada event yg berulang lebih dari satu kali pada berkas " . 
+                                        "Bila ada event yg berulang lebih dari satu kali pada berkas " .
                                         "pastikan event tersebut sesuai dengan aturan yg ada di Sistem " .
                                         "agar ikut dalam proses peng-imporan".
 $vocab["file_name"]                   = "Berkas";
@@ -477,7 +477,7 @@ $vocab["restore_original"]   = "Kembalikan ke aturan semula";
 // Entry types
 $vocab["type.I"]            = "Internal";
 $vocab["type.E"]            = "Eksternal";
- 
+
 // General
 $vocab["fatal_db_error"]     = "Kesalahan Fatal: sayangnya database belum siap untuk saat ini.";
 $vocab["back"]               = "Kembali";
